@@ -13,7 +13,7 @@ class Order
     public:
         Order () = default;
 
-        Order(Order_type _type, size_t _price, size_t _size, size_t _ID) 
+        Order(Order_type _type, long _price, size_t _size, size_t _ID) 
             : type(_type), price(_price), size(_size), ID(_ID)
         {
 
