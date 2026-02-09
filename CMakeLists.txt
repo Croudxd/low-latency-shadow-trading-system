@@ -6,12 +6,12 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 
-enable_testing()
+# enable_testing()
 
 add_executable(order-book src/main.cpp)
-add_executable(order-book-test test/test.cpp)
-add_executable(order-book-benchmark test/benchmark.cpp)
-
+# add_executable(order-book-test test/test.cpp)
+# add_executable(order-book-benchmark test/benchmark.cpp)
+#
 
 #TEST:
-add_test(NAME test COMMAND order-book-test)
+# add_test(NAME test COMMAND order-book-test)

@@ -10,6 +10,11 @@
 #include "trade.hpp"
 #include "utils.hpp"
 
+enum class Flags
+{
+    MATCH,
+    NONMATCH,
+};
 
 class Order_book
 {
@@ -21,27 +26,30 @@ class Order_book
             lookup[1] = &asks;
         }
 
-        void add_order (Order order)
+        void add_order (Order order, Flags flag )
         {
             (order.type == 0) ? order.price *= -1 : order.price;
-            bool matched = check_match(order);
-
-            if (matched == true)
+            if (flag == Flags::MATCH)
             {
-                if (!lookup[(order.type == 1) ? 0 : 1]->empty() && !lookup[(order.type == 1) ? 0 : 1]->begin()->second.empty())
-                {
+                bool matched = check_match(order);
 
-                    while ( order.size > 0)
+                if (matched == true)
+                {
+                    if (!lookup[(order.type == 1) ? 0 : 1]->empty() && !lookup[(order.type == 1) ? 0 : 1]->begin()->second.empty())
                     {
-                        if (lookup[(order.type == 1) ? 0 : 1]->empty())
+
+                        while ( order.size > 0)
                         {
-                            break;
+                            if (lookup[(order.type == 1) ? 0 : 1]->empty())
+                            {
+                                break;
+                            }
+                            if (!check_match(order))
+                            {
+                                break;
+                            }
+                            execute(order);
                         }
-                        if (!check_match(order))
-                        {
-                            break;
-                        }
-                        execute(order);
                     }
                 }
             }
@@ -54,7 +62,6 @@ class Order_book
                 order_lookup[list_it->ID] = Order_entry{ list_it, (order.type == Order_type::buy)};
                 return;
             }
-
         }
 
         bool check_match(Order order)
