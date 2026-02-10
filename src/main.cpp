@@ -24,14 +24,14 @@
 #include <cstdint>
 #include <iostream>
 #include <fcntl.h>
-#include <istream>
 #include <limits>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <thread>
 
 /** multiple by 1 million because rust feeder does this to avoid floats. So just normalizing*/
-static constexpr int BUCKET_SIZE = 5 * 1000000; 
+static constexpr int BUCKET_SIZE = 1 * 100000; 
+static constexpr int BUFFER_CAPACITY = 16384; 
 
 struct Data 
 {
@@ -50,8 +50,37 @@ struct Shared_memory_layout
     uint8_t           pad1[56];
     volatile uint64_t read_idx; 
     uint8_t           pad2[56];
-    Data              buffer[16384];
+    Data              buffer[BUFFER_CAPACITY];
 };
+
+struct Candle_shared_memory_layout 
+{
+    volatile uint64_t write_idx; 
+    uint8_t           pad1[56];
+    volatile uint64_t read_idx; 
+    uint8_t           pad2[56];
+    Candle            buffer[BUFFER_CAPACITY];
+};
+
+
+void send_candle(Candle_shared_memory_layout* candle_shm, Candle candle)
+{
+    uint64_t local_write_idx = candle_shm->write_idx;
+    uint64_t cached_read_idx = candle_shm->read_idx; 
+        if (local_write_idx - cached_read_idx >= BUFFER_CAPACITY) 
+        {
+            cached_read_idx = candle_shm->read_idx;
+            
+        }
+        if (local_write_idx - cached_read_idx >= BUFFER_CAPACITY) 
+        {
+            return;
+        }
+ 
+        candle_shm->buffer[local_write_idx % BUFFER_CAPACITY] = candle;
+        std::atomic_thread_fence(std::memory_order_release);
+        candle_shm->write_idx = local_write_idx + 1;
+}
 
 int main() 
 {
@@ -74,7 +103,19 @@ int main()
     shm->read_idx = local_read_idx;
     std::cout << "Connected! Watching memory...\n";
 
-    size_t local_bucket_size= 0;
+
+    int candle_fd = open("/dev/shm/hft_candle", O_RDWR | O_CREAT, 0666); 
+    ftruncate(candle_fd, sizeof(Candle_shared_memory_layout)); 
+    void* candle_ptr = mmap(NULL, sizeof(Candle_shared_memory_layout), PROT_READ | PROT_WRITE, MAP_SHARED, candle_fd, 0);
+    if (candle_ptr == MAP_FAILED) { perror("mmap failed"); return 1; }
+    Candle_shared_memory_layout* candle_shm = static_cast<Candle_shared_memory_layout*>(candle_ptr);
+
+    size_t count = 0;
+    std::cout << "Producer starting..." << std::endl;
+
+
+
+    long local_bucket_size= 0;
     long open = 0;
     long high = 0;
     long low = std::numeric_limits<long>::max();
@@ -85,13 +126,14 @@ int main()
         uint64_t current_write_idx = shm->write_idx;
         if (local_read_idx < current_write_idx) 
         {
-            int slot = local_read_idx % 16384;
+            int slot = local_read_idx % BUFFER_CAPACITY;
             Data raw = shm->buffer[slot];
             auto side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
             Order ord = {side, raw.price, raw.size, raw.id};
             /** status = 1 is a trade not an order so we dont add to the book.*/
             if (raw.status == 1)
             {
+                std::cout << "." << std::flush; 
                 if (open == 0)
                 {
                     open = raw.price;
@@ -108,13 +150,13 @@ int main()
                 if (local_bucket_size >= BUCKET_SIZE)
                 {
                     close = raw.price; 
-                    Candle candle = Candle{open, high, low, close, BUCKET_SIZE};
-                    //Dump into spsc
+                    Candle candle = Candle{open, high, low, close, local_bucket_size};
                     candle.print();
+                    send_candle(candle_shm, candle);
+                    local_bucket_size = 0;
                     open = 0;
                     high = 0;
                     low = std::numeric_limits<long>::max();
-                    close = 0;
                 }
             }
             else if (raw.action == 2)
@@ -134,4 +176,5 @@ int main()
         }
     }
 }
+
 
