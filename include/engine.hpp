@@ -177,7 +177,6 @@ namespace engine
                 /** status = 1 is a trade not an order so we dont add to the book.*/
                 if (raw.status == 1)
                 {
-                    std::cout << "." << std::flush;
                     if (current_open == 0)
                         current_open = raw.price;
                     if (raw.price > current_high)

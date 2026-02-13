@@ -9,6 +9,7 @@ include_directories(include)
 # enable_testing()
 
 add_executable(order-book src/main.cpp)
+add_executable(order-book-test test/test_.cpp)
 # add_executable(order-book-test test/test.cpp)
 # add_executable(order-book-benchmark test/benchmark.cpp)
 #
