@@ -165,10 +165,6 @@ class Order_book
             order.size -= trade_size;
             book_order.size -= trade_size;
 
-            std::cout << order.size << std::endl;
-            std::cout << trade_size << std::endl;
-            std::cout << trade_price << std::endl;
-            std::cout << book_order.size << std::endl;
 
             trade_history.emplace_back(cstime::get_timestamp(), trade_size, trade_price, order.type);
             trade_id++;

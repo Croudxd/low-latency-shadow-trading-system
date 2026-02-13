@@ -32,12 +32,6 @@ namespace engine
             int8_t   status; // trade/order
             uint8_t  pad1[1];
             
-            void print ()
-            {
-                std::cout << "ID " << id << std::endl;
-                std::cout << "size " << size << std::endl;
-                std::cout << "price " << size << std::endl;
-            }
         };
 
         template <typename T> struct memory_layout
@@ -79,7 +73,6 @@ namespace engine
                         }
                         close(fd); 
                     }
-                    std::cout << "Waiting for " << path << " to be ready..." << std::endl;
                     sleep(1);
                 }
             }
@@ -99,7 +92,6 @@ namespace engine
                 perror("mmap failed");
                 return nullptr;
             }
-            std::cout << "Successfully connected to: " << path << std::endl;
             return static_cast<T*>(ptr);
         }
 
@@ -165,6 +157,7 @@ namespace engine
                 mem::Data raw  = strategy_order->buffer[slot];
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
                 Order     ord  = { side, raw.price, raw.size, raw.id };
+                raw.print();
                 if (raw.action == 2)
                 {
                     book.cancel_order(raw.id, sender);
