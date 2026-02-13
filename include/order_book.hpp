@@ -1,12 +1,13 @@
 #pragma once
 #include <cstddef>
-#include <iostream>
+#include <cstdint>
 #include <vector>
 #include <list>
 #include <map>
 #include <unordered_map>
 
 #include "order.hpp"
+#include "report.hpp"
 #include "trade.hpp"
 #include "utils.hpp"
 
@@ -25,8 +26,8 @@ class Order_book
             lookup[0] = &bids;
             lookup[1] = &asks;
         }
-
-        void add_order (Order order, Flags flag )
+        template <typename Func>
+        void add_order (Order order, Flags flag, Func on_report)
         {
             (order.type == 0) ? order.price *= -1 : order.price;
             if (flag == Flags::MATCH)
@@ -48,7 +49,8 @@ class Order_book
                             {
                                 break;
                             }
-                            execute(order);
+                            Rep::Report repo = execute(order);
+                            on_report(repo);
                         }
                     }
                 }
@@ -60,6 +62,9 @@ class Order_book
                 auto list_it = std::prev(it->second.end());
 
                 order_lookup[list_it->ID] = Order_entry{ list_it, (order.type == Order_type::buy)};
+                Rep::Side side = (order.type == sell) ? Rep::Side::SELL : Rep::Side::BUY;
+                Rep::Report repo = Rep::Report(order.ID, Rep::Status::NEW, 0, order.price, order.size, side, Rep::Rejection_code::NOERROR, 0, cstime::get_timestamp());
+                on_report(repo);
                 return;
             }
         }
@@ -82,7 +87,8 @@ class Order_book
             return match;
         }
 
-        void cancel_order (size_t ID)
+        template <typename Func>
+        void cancel_order (size_t ID, Func on_report)
         {
             auto lookup_it = order_lookup.find(ID);
             if ( lookup_it == order_lookup.end())
@@ -95,6 +101,9 @@ class Order_book
             long price = it.location->price;
             bool map = (it.is_buy) ? 0 : 1;
 
+            Rep::Side side = (it.is_buy) ? Rep::Side::BUY : Rep::Side::SELL;
+
+
             auto price_it = lookup[map]->find(price);
             if ( price_it  != lookup[map]->end() )
             {
@@ -105,13 +114,15 @@ class Order_book
                 }
             }
 
+            Rep::Report report = Rep::Report(ID, Rep::Status::CANCELLED, 0, 0, 0, side, Rep::Rejection_code::NOERROR, 0 /**trade id*/, cstime::get_timestamp());
+            on_report(report);
             order_lookup.erase(lookup_it);
         }
 
         std::vector<Trade> get_trade_history() { return this->trade_history; }
 
     private:
-        void execute (Order& order) 
+        Rep::Report execute (Order& order) 
         {
             int type = (order.type == 1) ? 0 : 1;
             Order& book_order = lookup[type]->begin()->second.front();
@@ -129,6 +140,9 @@ class Order_book
 
             trade_history.emplace_back(cstime::get_timestamp(), trade_size, trade_price, order.type);
 
+            Rep::Status status = (order.size > 0) ? Rep::Status::PARTIALLY_FILLED : Rep::Status::FILLED;
+            Rep::Side side = (order.type == sell) ? Rep::Side::SELL : Rep::Side::BUY;
+
             if (book_order.size == 0)
             {
                 order_lookup.erase(book_order.ID);
@@ -138,8 +152,10 @@ class Order_book
                     lookup[type]->erase(lookup[type]->begin());
                 }
             }
-
+            trade_id++;
+            return Rep::Report(order.ID, status, trade_size, trade_price, order.size, side, Rep::Rejection_code::NOERROR, trade_id, cstime::get_timestamp());
         }
+
         struct Order_entry
         {
             std::list<Order>::iterator location;
@@ -151,5 +167,5 @@ class Order_book
         std::map<long, std::list<Order>>* lookup[2];
         std::vector<Trade> trade_history;
         std::unordered_map<size_t, Order_entry> order_lookup;
-
+        uint64_t trade_id = 0;
 };

@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <thread>
 #include <unistd.h>
+#include <report.hpp>
 
 namespace engine
 {
@@ -25,9 +26,9 @@ namespace engine
             uint64_t id;
             uint64_t size;
             int32_t  price;
-            int8_t   side;
-            int8_t   action;
-            int8_t   status;
+            int8_t   side; //sell / buy
+            int8_t   action; // cancel order
+            int8_t   status; // trade/order
             uint8_t  pad1[1];
         };
 
@@ -99,11 +100,31 @@ namespace engine
             candle_shm->write_idx = local_write_idx + 1;
         }
 
+        void send_report(mem::memory_layout<Rep::Report>* report_mem, Rep::Report report)
+        {
+            uint64_t local_write_idx = report_mem->write_idx;
+            uint64_t cached_read_idx = report_mem->read_idx;
+            if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
+            {
+                cached_read_idx = report_mem->read_idx;
+            }
+            if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
+            {
+                return;
+            }
+
+            report_mem->buffer[local_write_idx % global::BUFFER_CAPACITY] = report;
+            std::atomic_thread_fence(std::memory_order_release);
+            report_mem->write_idx = local_write_idx + 1;
+        }
+
         void connect()
         {
             rust_order     = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_ring", mem::Mem_flags::CONSUMER);
-            candle_mem     = mem_map<mem::memory_layout<Candle>>("/dev/shm/hft_candle", mem::Mem_flags::PRODUCER);
             strategy_order = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
+
+            candle_mem     = mem_map<mem::memory_layout<Candle>>("/dev/shm/hft_candle", mem::Mem_flags::PRODUCER);
+            report_mem     = mem_map<mem::memory_layout<Rep::Report>>("/dev/shm/hft_report", mem::Mem_flags::PRODUCER);
 
             rust_local_read_idx     = rust_order->write_idx;
             strategy_local_read_idx = strategy_order->write_idx;
@@ -113,6 +134,11 @@ namespace engine
         {
             uint64_t current_write_idx = strategy_order->write_idx;
 
+            auto sender = [&](const Rep::Report& rep) 
+            {
+                this->send_report(this->report_mem, rep);
+            };
+
             if (strategy_local_read_idx < current_write_idx)
             {
                 int       slot = strategy_local_read_idx % global::BUFFER_CAPACITY;
@@ -120,13 +146,13 @@ namespace engine
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
                 Order     ord  = { side, raw.price, raw.size, raw.id };
 
-                if (raw.action == 2)
+                if (raw.action == 1)
                 {
-                    book.cancel_order(raw.id);
+                    book.cancel_order(raw.id, sender);
                 }
                 else
                 {
-                    book.add_order(ord, Flags::MATCH);
+                    book.add_order(ord, Flags::MATCH, sender);
                 }
 
                 strategy_local_read_idx++;
@@ -136,8 +162,12 @@ namespace engine
 
         void rust_function(Order_book& book)
         {
-
             uint64_t current_write_idx = rust_order->write_idx;
+
+            auto sender = [&](const Rep::Report& rep) 
+            {
+                this->send_report(this->report_mem, rep);
+            };
             if (rust_local_read_idx < current_write_idx)
             {
                 int       slot = rust_local_read_idx % global::BUFFER_CAPACITY;
@@ -172,11 +202,11 @@ namespace engine
                 }
                 else if (raw.action == 2)
                 {
-                    book.cancel_order(raw.id);
+                    book.cancel_order(raw.id, sender);
                 }
                 else
                 {
-                    book.add_order(ord, Flags::NONMATCH);
+                    book.add_order(ord, Flags::NONMATCH, sender);
                 }
                 rust_local_read_idx++;
             }
@@ -197,6 +227,7 @@ namespace engine
         mem::memory_layout<mem::Data>* rust_order;
         mem::memory_layout<mem::Data>* strategy_order;
         mem::memory_layout<Candle>*    candle_mem;
+        mem::memory_layout<Rep::Report>* report_mem;
 
         uint64_t rust_local_read_idx     = 0;
         uint64_t strategy_local_read_idx = 0;
