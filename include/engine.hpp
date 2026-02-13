@@ -157,7 +157,6 @@ namespace engine
                 mem::Data raw  = strategy_order->buffer[slot];
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
                 Order     ord  = { side, raw.price, raw.size, raw.id };
-                raw.print();
                 if (raw.action == 2)
                 {
                     book.cancel_order(raw.id, sender);
