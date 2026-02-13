@@ -1,5 +1,6 @@
 #pragma once
-
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <atomic>
 #include <candle.hpp>
 #include <cstdint>
@@ -59,26 +60,39 @@ namespace engine
             int fd = 0;
             if (flag == mem::Mem_flags::CONSUMER)
             {
-                fd = open(path, O_RDWR);
-                while (fd == -1)
+                while (true)
                 {
-                    sleep(1);
                     fd = open(path, O_RDWR);
+                    if (fd != -1)
+                    {
+                        struct stat st;
+                        if (fstat(fd, &st) == 0 && st.st_size >= static_cast<off_t>(sizeof(T)))
+                        {
+                            break; 
+                        }
+                        close(fd); 
+                    }
+                    std::cout << "Waiting for " << path << " to be ready..." << std::endl;
+                    sleep(1);
                 }
             }
-            if (flag == mem::Mem_flags::PRODUCER)
+            else if (flag == mem::Mem_flags::PRODUCER)
             {
+                shm_unlink(path); 
                 fd = open(path, O_RDWR | O_CREAT, 0666);
-                ftruncate(fd, sizeof(T));
+                if (fd == -1) { std::cout << ("open failed"); return nullptr; }
+                if (ftruncate(fd, sizeof(T)) == -1) { std::cout << ("ftruncate failed"); return nullptr; }
             }
 
             void* ptr = mmap(NULL, sizeof(T), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            close(fd); 
+
             if (ptr == MAP_FAILED)
             {
                 perror("mmap failed");
                 return nullptr;
             }
-            std::cout << "Connected to memory" << std::endl;
+            std::cout << "Successfully connected to: " << path << std::endl;
             return static_cast<T*>(ptr);
         }
 
@@ -86,13 +100,12 @@ namespace engine
         {
             uint64_t local_write_idx = candle_shm->write_idx;
             uint64_t cached_read_idx = candle_shm->read_idx;
-            if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
+            
+            while (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
             {
+                std::atomic_thread_fence(std::memory_order_acquire);
+                __builtin_ia32_pause();
                 cached_read_idx = candle_shm->read_idx;
-            }
-            if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
-            {
-                return;
             }
 
             candle_shm->buffer[local_write_idx % global::BUFFER_CAPACITY] = candle;
@@ -104,13 +117,11 @@ namespace engine
         {
             uint64_t local_write_idx = report_mem->write_idx;
             uint64_t cached_read_idx = report_mem->read_idx;
-            if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
+            while (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
             {
+                std::atomic_thread_fence(std::memory_order_acquire);
+                __builtin_ia32_pause();
                 cached_read_idx = report_mem->read_idx;
-            }
-            if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
-            {
-                return;
             }
 
             report_mem->buffer[local_write_idx % global::BUFFER_CAPACITY] = report;
@@ -120,11 +131,12 @@ namespace engine
 
         void connect()
         {
+            candle_mem     = mem_map<mem::memory_layout<Candle>>("/dev/shm/hft_candle", mem::Mem_flags::PRODUCER);
+            report_mem     = mem_map<mem::memory_layout<Rep::Report>>("/dev/shm/hft_report", mem::Mem_flags::PRODUCER);
+
             rust_order     = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_ring", mem::Mem_flags::CONSUMER);
             strategy_order = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
 
-            candle_mem     = mem_map<mem::memory_layout<Candle>>("/dev/shm/hft_candle", mem::Mem_flags::PRODUCER);
-            report_mem     = mem_map<mem::memory_layout<Rep::Report>>("/dev/shm/hft_report", mem::Mem_flags::PRODUCER);
 
             rust_local_read_idx     = rust_order->write_idx;
             strategy_local_read_idx = strategy_order->write_idx;
@@ -139,14 +151,15 @@ namespace engine
                 this->send_report(this->report_mem, rep);
             };
 
-            if (strategy_local_read_idx < current_write_idx)
+            while (strategy_local_read_idx < current_write_idx)
             {
+                std::atomic_thread_fence(std::memory_order_acquire);
                 int       slot = strategy_local_read_idx % global::BUFFER_CAPACITY;
                 mem::Data raw  = strategy_order->buffer[slot];
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
                 Order     ord  = { side, raw.price, raw.size, raw.id };
 
-                if (raw.action == 1)
+                if (raw.action == 2)
                 {
                     book.cancel_order(raw.id, sender);
                 }
@@ -168,8 +181,9 @@ namespace engine
             {
                 this->send_report(this->report_mem, rep);
             };
-            if (rust_local_read_idx < current_write_idx)
+            while (rust_local_read_idx < current_write_idx)
             {
+                std::atomic_thread_fence(std::memory_order_acquire);
                 int       slot = rust_local_read_idx % global::BUFFER_CAPACITY;
                 mem::Data raw  = rust_order->buffer[slot];
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
@@ -219,6 +233,18 @@ namespace engine
             {
                 strategy_order_func(book);
                 rust_function(book);
+                Rep::Report repo = Rep::Report(
+                    0, 
+                    Rep::Status::NEW, 
+                    0, 
+                    0, 
+                    0, 
+                    Rep::Side::BUY, 
+                    Rep::Rejection_code::NOERROR, 
+                    0, 
+                    cstime::get_timestamp()
+                );
+                send_report(report_mem,  repo);
             }
         }
 
