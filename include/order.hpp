@@ -1,5 +1,7 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
+#include <iostream>
 enum Order_type
 {
     buy,
@@ -13,7 +15,7 @@ class Order
     public:
         Order () = default;
 
-        Order(Order_type _type, long _price, size_t _size, size_t _ID) 
+        Order(Order_type _type, int64_t _price, uint64_t _size, uint64_t _ID) 
             : type(_type), price(_price), size(_size), ID(_ID)
         {
 
@@ -44,10 +46,17 @@ class Order
             this->ID = other.ID;
         }
 
+        void print()
+        {
+            std::cout << "ID: " << ID << std::endl;
+            std::cout << "price: " << price << std::endl;
+            std::cout << "size: " << size << std::endl;
+        }
+
     private:
         Order_type type;
-        long price;
-        size_t size;
-        size_t ID;
+        int64_t price;
+        uint64_t size;
+        uint64_t ID;
 
 };

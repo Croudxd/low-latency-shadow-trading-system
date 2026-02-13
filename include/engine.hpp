@@ -26,11 +26,18 @@ namespace engine
         {
             uint64_t id;
             uint64_t size;
-            int32_t  price;
+            int64_t  price;
             int8_t   side; //sell / buy
             int8_t   action; // cancel order
             int8_t   status; // trade/order
             uint8_t  pad1[1];
+            
+            void print ()
+            {
+                std::cout << "ID " << id << std::endl;
+                std::cout << "size " << size << std::endl;
+                std::cout << "price " << size << std::endl;
+            }
         };
 
         template <typename T> struct memory_layout
@@ -158,7 +165,6 @@ namespace engine
                 mem::Data raw  = strategy_order->buffer[slot];
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
                 Order     ord  = { side, raw.price, raw.size, raw.id };
-
                 if (raw.action == 2)
                 {
                     book.cancel_order(raw.id, sender);
@@ -205,7 +211,6 @@ namespace engine
                         long   close = raw.price;
                         Candle candle
                             = Candle { current_open, current_high, current_low, close, current_local_bucket_size };
-                        candle.print();
                         send_candle(candle_mem, candle);
                         current_local_bucket_size = 0;
                         current_open              = 0;
@@ -233,18 +238,6 @@ namespace engine
             {
                 strategy_order_func(book);
                 rust_function(book);
-                Rep::Report repo = Rep::Report(
-                    0, 
-                    Rep::Status::NEW, 
-                    0, 
-                    0, 
-                    0, 
-                    Rep::Side::BUY, 
-                    Rep::Rejection_code::NOERROR, 
-                    0, 
-                    cstime::get_timestamp()
-                );
-                send_report(report_mem,  repo);
             }
         }
 

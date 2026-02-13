@@ -151,11 +151,24 @@ class Order_book
             int type = (order.type == 1) ? 0 : 1;
             Order& book_order = lookup[type]->begin()->second.front();
 
-            long trade_size = (order.size < book_order.size) ? order.size : book_order.size;
-            long trade_price = std::abs(book_order.price);
+            if (book_order.size <= 0 || std::abs(book_order.price) == 0) 
+            {
+                lookup[type]->begin()->second.pop_front();
+                if (lookup[type]->begin()->second.empty()) {
+                    lookup[type]->erase(lookup[type]->begin());
+                }
+                return execute(order, on_report); 
+            }
+            uint64_t trade_size = (order.size < book_order.size) ? order.size : book_order.size;
+            int64_t trade_price = std::abs(book_order.price);
 
             order.size -= trade_size;
             book_order.size -= trade_size;
+
+            std::cout << order.size << std::endl;
+            std::cout << trade_size << std::endl;
+            std::cout << trade_price << std::endl;
+            std::cout << book_order.size << std::endl;
 
             trade_history.emplace_back(cstime::get_timestamp(), trade_size, trade_price, order.type);
             trade_id++;
@@ -166,14 +179,15 @@ class Order_book
             Rep::Report maker_rep(
                 book_order.ID,
                 maker_status,
-                trade_size / 1000000.0,
-                trade_price / 100.0,
-                book_order.size / 100.0,
+                trade_size ,
+                trade_price ,
+                book_order.size,
                 maker_side,
                 Rep::Rejection_code::NOERROR,
                 trade_id,
                 cstime::get_timestamp()
             );
+            // maker_rep.print();
             on_report(maker_rep); 
 
             if (book_order.size == 0)
