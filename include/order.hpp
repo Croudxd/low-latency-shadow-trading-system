@@ -33,6 +33,7 @@ class Order
 
     friend class Order_book;
     public:
+        bool active = true;
         Order () = default;
 
         Order(Order_type _type, int64_t _price, uint64_t _size, uint64_t _ID) 

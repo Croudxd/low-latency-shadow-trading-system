@@ -107,7 +107,6 @@ TEST(execute_match, check_book)
     };
 
     Order_book book;
-
     {
         Order ord = Order(Order_type::buy, 123, 12, 123);
         

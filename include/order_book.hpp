@@ -1,21 +1,23 @@
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <vector>
-#include <list>
+#include <deque>
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 #include "order.hpp"
 #include "report.hpp"
 #include "trade.hpp"
 #include "utils.hpp"
+
 #ifdef UNIT_TEST
 class strategy_order_handles_strategy_data_Test;
 class add_order_check_book_Test;
 class rust_feeder_handles_rust_data_Test;
-class add_order_check_book_Test;
 class cancel_order_check_book_Test;
 class check_match_check_book_Test;
 class execute_match_check_book_Test;
@@ -29,218 +31,212 @@ enum class Flags
 
 class Order_book
 {
-    #ifdef UNIT_TEST
+#ifdef UNIT_TEST
     friend class ::strategy_order_handles_strategy_data_Test;
     friend class ::add_order_check_book_Test;
     friend class ::rust_feeder_handles_rust_data_Test;
-    friend class ::add_order_check_book_Test;
     friend class ::cancel_order_check_book_Test;
     friend class ::check_match_check_book_Test;
     friend class ::execute_match_check_book_Test;
-    #endif
+#endif
+
     friend class Order;
-    public:
-        Order_book ()
-        {
-            lookup[0] = &bids;
-            lookup[1] = &asks;
-        }
-        template <typename Func>
-        void add_order (Order order, Flags flag, Func on_report)
-        {
-            (order.type == 0) ? order.price *= -1 : order.price;
-            if (flag == Flags::MATCH)
-            {
-                bool matched = check_match(order);
 
-                if (matched == true)
+    struct Order_entry
+    {
+        Order* location;
+        bool   is_buy;
+    };
+
+    std::map<int64_t, std::deque<Order>>  bids;
+    std::map<int64_t, std::deque<Order>>  asks;
+    std::map<int64_t, std::deque<Order>>* lookup[2];
+
+    std::vector<Trade>                      trade_history;
+    std::unordered_map<size_t, Order_entry> order_lookup;
+    uint64_t                                trade_id = 0;
+
+public:
+    Order_book()
+    {
+        lookup[0] = &bids;
+        lookup[1] = &asks;
+        order_lookup.reserve(100000);
+    }
+
+    template <typename Func> void add_order(Order order, Flags flag, Func on_report)
+    {
+        if (flag == Flags::MATCH)
+        {
+            while (order.size > 0)
+            {
+                if (!check_match(order))
                 {
-                    if (!lookup[(order.type == 1) ? 0 : 1]->empty() && !lookup[(order.type == 1) ? 0 : 1]->begin()->second.empty())
-                    {
-
-                        while ( order.size > 0)
-                        {
-                            if (lookup[(order.type == 1) ? 0 : 1]->empty())
-                            {
-                                break;
-                            }
-                            if (!check_match(order))
-                            {
-                                break;
-                            }
-                            Rep::Report repo = execute(order, on_report);
-                            on_report(repo);
-                        }
-                    }
+                    break;
                 }
-            }
-            if (order.size > 0)
-            {
-                uint64_t saved_id    = order.ID;
-                long     saved_price = order.price;
-                long     saved_size  = order.size;
-                int      saved_type  = order.type;
-                bool     is_buy      = (saved_type == 0); 
 
-                auto [ it, inserted ] = lookup[saved_type]->try_emplace(saved_price);
-                
-                it->second.push_back(std::move(order));
-                auto list_it = std::prev(it->second.end());
+                Rep::Report repo = execute(order, on_report);
 
-                order_lookup[saved_id] = Order_entry{ list_it, is_buy };
-
-                Rep::Side side = (saved_type == 1) ? Rep::Side::SELL : Rep::Side::BUY;
-
-                long report_price = (saved_price < 0) ? saved_price * -1 : saved_price;
-
-                Rep::Report repo = Rep::Report(
-                    saved_id, 
-                    Rep::Status::NEW, 
-                    0, 
-                    report_price / 100.0, 
-                    saved_size / 1000000.0, 
-                    side, 
-                    Rep::Rejection_code::NOERROR, 
-                    0, 
-                    cstime::get_timestamp()
-                );
-                
-                if (flag == Flags::MATCH) on_report(repo);
-                return;
-            }
-        }
-
-        bool check_match(const Order& order)
-        {
-           int type = (order.type == 1) ? 0 : 1;
-            if (lookup[type]->empty()) return false;
-            bool match = false;
-            auto it = lookup[type]->begin();
-
-            if (order.type == Order_type::sell)
-            {
-                match = order.price <= it->first*-1;
-            }
-            if (order.type == Order_type::buy)
-            {
-                match = order.price*-1 >= it->first ;
-            }
-            return match;
-        }
-
-        template <typename Func>
-        void cancel_order (size_t ID, Func on_report)
-        {
-            auto lookup_it = order_lookup.find(ID);
-            if ( lookup_it == order_lookup.end())
-            {
-                return;
-            }
-
-            auto& it = lookup_it->second;
-
-            long price = it.location->price;
-            bool map = (it.is_buy) ? 0 : 1;
-
-            Rep::Side side = (it.is_buy) ? Rep::Side::BUY : Rep::Side::SELL;
-
-
-            auto price_it = lookup[map]->find(price);
-            if ( price_it  != lookup[map]->end() )
-            {
-                price_it->second.erase(it.location);
-                if(price_it->second.empty())
+                if (repo.status == Rep::Status::FILLED || repo.status == Rep::Status::PARTIALLY_FILLED)
                 {
-                    lookup[map]->erase(price_it);
+                    on_report(repo);
                 }
-            }
 
-            Rep::Report report = Rep::Report(ID, Rep::Status::CANCELLED, 0, 0, 0, side, Rep::Rejection_code::NOERROR, 0 /**trade id*/, cstime::get_timestamp());
-            on_report(report);
-            order_lookup.erase(lookup_it);
+                if (repo.last_quantity == 0)
+                    break;
+            }
         }
 
-        std::vector<Trade> get_trade_history() { return this->trade_history; }
-
-    private:
-        template<typename Func>
-        Rep::Report execute (Order& order, Func on_report) 
+        if (order.size > 0)
         {
-            int type = (order.type == 1) ? 0 : 1;
-            Order& book_order = lookup[type]->begin()->second.front();
+            uint64_t saved_id = order.ID;
+            bool     is_buy   = (order.type == Order_type::buy);
 
-            if (book_order.size <= 0 || std::abs(book_order.price) == 0) 
+            int64_t storage_price = (is_buy) ? (order.price * -1) : order.price;
+            order.price           = storage_price;
+
+            Order* stored_ptr = nullptr;
+
+            if (is_buy)
             {
-                lookup[type]->begin()->second.pop_front();
-                if (lookup[type]->begin()->second.empty()) {
-                    lookup[type]->erase(lookup[type]->begin());
-                }
-                return execute(order, on_report); 
+                bids[storage_price].push_back(order);
+                stored_ptr = &bids[storage_price].back();
             }
-            uint64_t trade_size = (order.size < book_order.size) ? order.size : book_order.size;
-            int64_t trade_price = std::abs(book_order.price);
+            else
+            {
+                asks[storage_price].push_back(order);
+                stored_ptr = &asks[storage_price].back();
+            }
 
-            order.size -= trade_size;
-            book_order.size -= trade_size;
+            order_lookup[saved_id] = Order_entry { stored_ptr, is_buy };
 
+            Rep::Report rep(saved_id, Rep::Status::NEW, 0, 0, order.size, (is_buy ? Rep::Side::BUY : Rep::Side::SELL),
+                Rep::Rejection_code::NOERROR, 0, 0);
+            on_report(rep);
+        }
+    }
 
-            trade_history.emplace_back(cstime::get_timestamp(), trade_size, trade_price, order.type);
+    bool check_match(const Order& order)
+    {
+        bool  is_buy      = (order.type == Order_type::buy);
+        auto* target_book = (is_buy) ? &asks : &bids;
+
+        if (target_book->empty())
+            return false;
+
+        int64_t best_price = target_book->begin()->first;
+
+        if (is_buy)
+        {
+            return order.price >= best_price;
+        }
+        else
+        {
+            return order.price <= std::abs(best_price);
+        }
+    }
+
+    template <typename Func> void cancel_order(size_t ID, Func on_report)
+    {
+        auto lookup_it = order_lookup.find(ID);
+        if (lookup_it == order_lookup.end())
+            return;
+
+        Order* order_ptr = lookup_it->second.location;
+        bool   is_buy    = lookup_it->second.is_buy;
+
+        if (order_ptr)
+        {
+            order_ptr->active = false;
+        }
+
+        Rep::Report report(ID, Rep::Status::CANCELLED, 0, 0, 0, (is_buy ? Rep::Side::BUY : Rep::Side::SELL),
+            Rep::Rejection_code::NOERROR, 0, cstime::get_timestamp());
+        on_report(report);
+
+        order_lookup.erase(lookup_it);
+    }
+
+    std::vector<Trade> get_trade_history()
+    {
+        return this->trade_history;
+    }
+
+private:
+    template <typename Func> 
+    Rep::Report execute(Order& taker, Func on_report)
+    {
+        bool  is_buy_taker = (taker.type == Order_type::buy);
+        auto* book_side    = (is_buy_taker) ? &asks : &bids;
+
+        uint64_t total_filled = 0;
+        int64_t  last_exec_price = 0;
+        while (taker.size > 0 && !book_side->empty())
+        {
+            auto               best_price_it = book_side->begin();
+            std::deque<Order>& level         = best_price_it->second;
+
+            if (!level.empty() && !level.front().active)
+            {
+                level.pop_front();
+                if (level.empty())
+                {
+                    book_side->erase(best_price_it);
+                }
+                continue;
+            }
+
+            if (level.empty())
+            {
+                book_side->erase(best_price_it);
+                continue;
+            }
+
+            Order&  maker           = level.front();
+            int64_t maker_price_abs = std::abs(maker.price);
+
+            if (is_buy_taker)
+            {
+                if (taker.price < maker_price_abs)
+                    break;
+            }
+            else
+            {
+                if (taker.price > maker_price_abs)
+                    break;
+            }
+
+            uint64_t trade_qty   = std::min(taker.size, maker.size);
+            int64_t  trade_price = maker_price_abs;
+
+            last_exec_price = trade_price;
+
+            taker.size -= trade_qty;
+            maker.size -= trade_qty;
+            total_filled += trade_qty;
             trade_id++;
 
-            Rep::Status maker_status = (book_order.size > 0) ? Rep::Status::PARTIALLY_FILLED : Rep::Status::FILLED;
-            Rep::Side   maker_side   = (book_order.type == Order_type::sell) ? Rep::Side::SELL : Rep::Side::BUY;
+            Rep::Status maker_status = (maker.size == 0) ? Rep::Status::FILLED : Rep::Status::PARTIALLY_FILLED;
+            Rep::Report maker_rep(maker.ID, maker_status, trade_qty, trade_price, maker.size,
+                (is_buy_taker ? Rep::Side::SELL : Rep::Side::BUY), Rep::Rejection_code::NOERROR, trade_id,
+                cstime::get_timestamp());
+            on_report(maker_rep);
 
-            Rep::Report maker_rep(
-                book_order.ID,
-                maker_status,
-                trade_size ,
-                trade_price ,
-                book_order.size,
-                maker_side,
-                Rep::Rejection_code::NOERROR,
-                trade_id,
-                cstime::get_timestamp()
-            );
-            // maker_rep.print();
-            on_report(maker_rep); 
-
-            if (book_order.size == 0)
+            if (maker.size == 0)
             {
-                order_lookup.erase(book_order.ID);
-                lookup[type]->begin()->second.pop_front(); 
-                
-                if (lookup[type]->begin()->second.empty())
+                order_lookup.erase(maker.ID);
+                level.pop_front();
+                if (level.empty())
                 {
-                    lookup[type]->erase(lookup[type]->begin());
+                    book_side->erase(best_price_it);
                 }
             }
+        }
 
-    Rep::Status taker_status = (order.size > 0) ? Rep::Status::PARTIALLY_FILLED : Rep::Status::FILLED;
-    Rep::Side   taker_side   = (order.type == Order_type::sell) ? Rep::Side::SELL : Rep::Side::BUY;
+        Rep::Status taker_status = (taker.size == 0) ? Rep::Status::FILLED : Rep::Status::PARTIALLY_FILLED;
 
-    return Rep::Report(
-        order.ID, 
-        taker_status, 
-        trade_size, 
-        trade_price, 
-        order.size, 
-        taker_side, 
-        Rep::Rejection_code::NOERROR, 
-        trade_id, 
-        cstime::get_timestamp()
-    );
-}
-
-        struct Order_entry
-        {
-            std::list<Order>::iterator location;
-            bool is_buy;
-        };
-
-        std::map<long, std::list<Order>> bids;
-        std::map<long, std::list<Order>> asks;
-        std::map<long, std::list<Order>>* lookup[2];
-        std::vector<Trade> trade_history;
-        std::unordered_map<size_t, Order_entry> order_lookup;
-        uint64_t trade_id = 0;
+        return Rep::Report(taker.ID, taker_status, total_filled, last_exec_price, taker.size,
+            (is_buy_taker ? Rep::Side::BUY : Rep::Side::SELL), Rep::Rejection_code::NOERROR, trade_id,
+            cstime::get_timestamp());
+    }
 };

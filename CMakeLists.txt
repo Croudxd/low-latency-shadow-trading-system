@@ -17,10 +17,17 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+FetchContent_Declare(
+  benchmark
+  URL https://github.com/google/benchmark/archive/refs/tags/v1.8.3.zip
+)
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(benchmark)
+
 find_package(Threads REQUIRED)
 
 enable_testing()
-include(GoogleTest) 
+include(GoogleTest)
 
 add_executable(engine-test test/engine_test.cpp) 
 target_compile_definitions(engine-test PRIVATE UNIT_TEST) 
@@ -31,6 +38,9 @@ add_executable(order-test test/order-book-test.cpp)
 target_compile_definitions(order-test PRIVATE UNIT_TEST) 
 target_link_libraries(order-test GTest::gtest_main Threads::Threads)
 gtest_discover_tests(order-test)
+
+add_executable(micro-bench benchmark/micro_bench.cpp)
+target_link_libraries(micro-bench benchmark::benchmark Threads::Threads)
 
 add_executable(order-book src/main.cpp)
 target_link_libraries(order-book PRIVATE Threads::Threads)
