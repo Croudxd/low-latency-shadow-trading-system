@@ -2,6 +2,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+
+#ifdef UNIT_TEST
+class strategy_order_handles_strategy_data_Test;
+class rust_feeder_handles_rust_data_Test;
+class add_order_check_book_Test;
+class cancel_order_check_book_Test;
+class check_match_check_book_Test;
+class execute_match_check_book_Test;
+#endif
+
 enum Order_type
 {
     buy,
@@ -11,6 +21,16 @@ enum Order_type
 
 class Order 
 {
+    
+    #ifdef UNIT_TEST
+    friend class ::strategy_order_handles_strategy_data_Test;
+    friend class ::rust_feeder_handles_rust_data_Test;
+    friend class ::add_order_check_book_Test;
+    friend class ::cancel_order_check_book_Test;
+    friend class ::check_match_check_book_Test;
+    friend class ::execute_match_check_book_Test;
+    #endif
+
     friend class Order_book;
     public:
         Order () = default;

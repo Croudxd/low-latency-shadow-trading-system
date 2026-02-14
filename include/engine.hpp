@@ -12,6 +12,14 @@
 #include <unistd.h>
 #include <report.hpp>
 
+#ifdef UNIT_TEST
+class rust_feeder_handles_rust_data_Test;
+class send_report_report_function_Test;
+class strategy_order_handles_strategy_data_Test;
+class add_order_check_book_Test;
+class send_candle_candle_function_Test;
+#endif
+
 namespace engine
 {
     namespace global
@@ -31,7 +39,6 @@ namespace engine
             int8_t   action; // cancel order
             int8_t   status; // trade/order
             uint8_t  pad1[1];
-            
         };
 
         template <typename T> struct memory_layout
@@ -49,9 +56,26 @@ namespace engine
             PRODUCER,
         };
     } // namespace mem
+      //
+    enum engine_flags 
+    {
+        TEST,
+        NORMAL,
+    };
 
     class Engine
     {
+
+    /** testing */
+        #ifdef UNIT_TEST
+        friend class ::rust_feeder_handles_rust_data_Test;
+        friend class ::send_report_report_function_Test;
+        friend class ::strategy_order_handles_strategy_data_Test;
+        friend class ::send_candle_candle_function_Test;
+        friend class ::add_order_check_book_Test;
+        int capture_val = 0;
+        #endif
+
 
     public:
         Engine() = default;
@@ -99,7 +123,6 @@ namespace engine
         {
             uint64_t local_write_idx = candle_shm->write_idx;
             uint64_t cached_read_idx = candle_shm->read_idx;
-            
             while (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
             {
                 std::atomic_thread_fence(std::memory_order_acquire);
@@ -160,10 +183,16 @@ namespace engine
                 if (raw.action == 2)
                 {
                     book.cancel_order(raw.id, sender);
+                    #ifdef UNIT_TEST
+                    capture_val = 1;
+                    #endif
                 }
                 else
                 {
                     book.add_order(ord, Flags::MATCH, sender);
+                    #ifdef UNIT_TEST
+                    capture_val = 2;
+                    #endif
                 }
 
                 strategy_local_read_idx++;
@@ -209,13 +238,23 @@ namespace engine
                         current_high              = 0;
                         current_low               = std::numeric_limits<long>::max();
                     }
+                    #ifdef UNIT_TEST
+                    this->capture_val = 1;
+                    #endif
                 }
                 else if (raw.action == 2)
                 {
                     book.cancel_order(raw.id, sender);
+
+                    #ifdef UNIT_TEST
+                    this->capture_val = 2;
+                    #endif
                 }
                 else
                 {
+                    #ifdef UNIT_TEST
+                    this->capture_val = 3;
+                    #endif
                     book.add_order(ord, Flags::NONMATCH, sender);
                 }
                 rust_local_read_idx++;
@@ -230,7 +269,7 @@ namespace engine
             {
                 strategy_order_func(book);
                 rust_function(book);
-            }
+            } 
         }
 
     private:
@@ -238,6 +277,7 @@ namespace engine
         mem::memory_layout<mem::Data>* strategy_order;
         mem::memory_layout<Candle>*    candle_mem;
         mem::memory_layout<Rep::Report>* report_mem;
+
 
         uint64_t rust_local_read_idx     = 0;
         uint64_t strategy_local_read_idx = 0;
