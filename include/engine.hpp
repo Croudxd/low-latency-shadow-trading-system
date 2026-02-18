@@ -159,6 +159,8 @@ namespace engine
             rust_order     = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_ring", mem::Mem_flags::CONSUMER);
             strategy_order = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
 
+            // kdb_buf = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
+
 
             rust_local_read_idx     = rust_order->write_idx;
             strategy_local_read_idx = strategy_order->write_idx;
@@ -241,6 +243,11 @@ namespace engine
                     #ifdef UNIT_TEST
                     this->capture_val = 1;
                     #endif
+
+                    auto taker_side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
+
+                    Order dummy_taker(taker_side, raw.price, raw.size, 0);
+                    book.add_order(dummy_taker, Flags::MATCH, [](const Rep::Report& rep){ });
                 }
                 else if (raw.action == 2)
                 {
@@ -277,6 +284,7 @@ namespace engine
         mem::memory_layout<mem::Data>* strategy_order;
         mem::memory_layout<Candle>*    candle_mem;
         mem::memory_layout<Rep::Report>* report_mem;
+        // mem::memory_layout<T*>* kdb_buf;
 
 
         uint64_t rust_local_read_idx     = 0;
