@@ -1,9 +1,0 @@
-[submodule "order-book"]
-	path = order-book
-	url = git@github.com:Croudxd/order-book
-[submodule "bitfinex-feeder"]
-	path = bitfinex-feeder
-	url = git@github.com:Croudxd/bitfinex-feeder
-[submodule "strategy"]
-	path = strategy
-	url = git@github.com:Croudxd/strategy
