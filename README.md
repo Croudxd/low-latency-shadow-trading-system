@@ -2,7 +2,7 @@
 
 A modular, high-frequency trading (HFT) infrastructure built in C++. It utilizes **Shared Memory (IPC)** and **Lock-Free Ring Buffers** to achieve nanosecond-level latency and throughput exceeding 100 million orders per second.
 
-## 🚀 Performance Benchmarks
+## Performance Benchmarks
 
 The system operates at the speed of the CPU cache, effectively removing software overhead.
 
@@ -15,7 +15,7 @@ The system operates at the speed of the CPU cache, effectively removing software
 
 ---
 
-## 🏗 System Architecture
+## System Architecture
 
 The project is decoupled into independent processes that communicate via **Memory Mapped Files (`/dev/shm`)**. This allows the Strategy and Engine to run on separate CPU cores without context-switching overhead.
 
