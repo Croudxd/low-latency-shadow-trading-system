@@ -1,0 +1,31 @@
+Language: Cpp
+
+# 1. Indentation
+BasedOnStyle: WebKit  # WebKit is the closest base for Allman/BSD style
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never         # Uses spaces instead of tabs
+
+# 2. Braces (The "Allman" style: braces on their own lines)
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# 3. Namespaces (Indents content inside namespaces)
+NamespaceIndentation: All
+FixNamespaceComments: true
+
+# 4. Alignment
+PointerAlignment: Left        # "Type* ptr" instead of "Type *ptr"
+AlignConsecutiveDeclarations: true # Aligns your struct members nicely (like your Data struct)
+AlignConsecutiveAssignments: true  # Aligns = signs in blocks
+AlignTrailingComments: true
+
+# 5. Class/Struct Specifics
+AccessModifierOffset: -4      # Aligns 'public:' with the class braces
+EmptyLineBeforeAccessModifier: Always
+
+# 6. Line Length
+ColumnLimit: 120              # Prevents wrapping lines too early
+...
