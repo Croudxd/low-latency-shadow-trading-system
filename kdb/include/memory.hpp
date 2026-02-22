@@ -9,6 +9,11 @@
 #include <thread>
 #include <unistd.h>
 
+#include <common/report.hpp>
+#include <common/trade.hpp>
+#include <common/candle.hpp>
+#include <common/order.hpp>
+
 namespace memory
 {
     namespace global
@@ -30,38 +35,18 @@ namespace memory
         PRODUCER,
     };
 
-    struct Report
-    {
-
-    };
-
-    struct Order
-    {
-
-    };
-
-    struct Trade
-    {
-
-    };
-
-    struct Candle 
-    {
-
-    };
-
     class Memory
     {
         private:
-            memory_layout<Report>* report_mem ;
-            memory_layout<Order>* order_mem ;
-            memory_layout<Trade>* trade_mem ;
-            memory_layout<Candle>* candle_mem ;
+            memory_layout<common::Report>* report_mem ;
+            memory_layout<common::Order>* order_mem ;
+            memory_layout<common::Trade>* trade_mem ;
+            memory_layout<common::Candle>* candle_mem ;
 
-            memory_layout<Report>* report_mem_prod;
-            memory_layout<Order>* order_mem_prod;
-            memory_layout<Trade>* trade_mem_prod;
-            memory_layout<Candle>* candle_mem_prod;
+            memory_layout<common::Report>* report_mem_prod;
+            memory_layout<common::Order>* order_mem_prod;
+            memory_layout<common::Trade>* trade_mem_prod;
+            memory_layout<common::Candle>* candle_mem_prod;
 
         public:
             template <typename T> 
@@ -105,15 +90,15 @@ namespace memory
 
             void connect()
             {
-                report_mem = mem_map<memory_layout<Report>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                order_mem = mem_map<memory_layout<Order>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                trade_mem = mem_map<memory_layout<Trade>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                candle_mem = mem_map<memory_layout<Candle>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                report_mem = mem_map<memory_layout<common::Report>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                order_mem = mem_map<memory_layout<common::Order>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                trade_mem = mem_map<memory_layout<common::Trade>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                candle_mem = mem_map<memory_layout<common::Candle>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
 
-                report_mem_prod = mem_map<memory_layout<Report>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                order_mem_prod = mem_map<memory_layout<Order>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                trade_mem_prod = mem_map<memory_layout<Trade>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                candle_mem_prod = mem_map<memory_layout<Candle>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                report_mem_prod = mem_map<memory_layout<common::Report>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                order_mem_prod = mem_map<memory_layout<common::Order>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                trade_mem_prod = mem_map<memory_layout<common::Trade>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                candle_mem_prod = mem_map<memory_layout<common::Candle>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
             }
 
             template <typename T, typename Y>
@@ -159,7 +144,7 @@ namespace memory
 
             void run()
             {
-                read_spsc<memory_layout<Candle>, Candle>(candle_mem, candle_mem_prod);
+                read_spsc<memory_layout<common::Candle>, common::Candle>(candle_mem, candle_mem_prod);
             }
     };
 }

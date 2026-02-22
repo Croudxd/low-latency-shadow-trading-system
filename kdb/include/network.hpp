@@ -1,25 +1,30 @@
 #pragma once
 #include "memory.hpp"
+#include <common/spsc_memory_struct.hpp>
+#include <common/report.hpp>
+#include <common/candle.hpp>
+#include <common/trade.hpp>
+#include <common/order.hpp>
 
 namespace network
 {
     class Sender
     {
         private:
-            memory::memory_layout<memory::Report>* report_mem;
-            memory::memory_layout<memory::Candle>* candle_mem;
-            memory::memory_layout<memory::Trade>* trade_mem;
-            memory::memory_layout<memory::Order>* order_mem;
+            common::memory_struct<common::Report>* report_mem;
+            common::memory_struct<common::Candle>* candle_mem;
+            common::memory_struct<common::Trade>* trade_mem;
+            common::memory_struct<common::Order>* order_mem;
 
         public:
             void connect()
             {
-                memory::Report rep;
+                common::Report rep;
                 memory::Memory mem = memory::Memory();
-                report_mem = mem.mem_map<memory::memory_layout<memory::Report>>("/path/", memory::Mem_flags::CONSUMER);
-                candle_mem = mem.mem_map<memory::memory_layout<memory::Candle>>("/path/", memory::Mem_flags::CONSUMER);
-                trade_mem = mem.mem_map<memory::memory_layout<memory::Trade>>("/path/", memory::Mem_flags::CONSUMER);
-                order_mem = mem.mem_map<memory::memory_layout<memory::Order>>("/path/", memory::Mem_flags::CONSUMER);
+                report_mem = mem.mem_map<common::memory_struct<common::Report>>("/path/", memory::Mem_flags::CONSUMER);
+                candle_mem = mem.mem_map<common::memory_struct<common::Candle>>("/path/", memory::Mem_flags::CONSUMER);
+                trade_mem = mem.mem_map<common::memory_struct<common::Trade>>("/path/", memory::Mem_flags::CONSUMER);
+                order_mem = mem.mem_map<common::memory_struct<common::Order>>("/path/", memory::Mem_flags::CONSUMER);
             }
             
             template <typename T, typename Y>
