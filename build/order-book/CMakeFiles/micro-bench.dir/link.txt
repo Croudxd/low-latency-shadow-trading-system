@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/micro-bench.dir/link.d "CMakeFiles/micro-bench.dir/benchmark/micro_bench.cpp.o" -o micro-bench  ../_deps/benchmark-build/src/libbenchmark.a -lrt

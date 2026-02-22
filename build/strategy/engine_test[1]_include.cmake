@@ -1,5 +1,0 @@
-if(EXISTS "/home/ben/dev/low-latency-shadow-trading-system/build/strategy/engine_test[1]_tests.cmake")
-  include("/home/ben/dev/low-latency-shadow-trading-system/build/strategy/engine_test[1]_tests.cmake")
-else()
-  add_test(engine_test_NOT_BUILT engine_test_NOT_BUILT)
-endif()
