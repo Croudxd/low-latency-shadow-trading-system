@@ -3,3 +3,4 @@ build/
 compile_commands.json
 kdb/include/q
 kdb/lib/
+view/__pycache__/
