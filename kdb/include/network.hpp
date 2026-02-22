@@ -41,14 +41,19 @@ namespace network
                     {
                         int slot = local_read_idx % 16384;
                         Y raw  = mem_lay->buffer[slot];
-                        // Send to a producer.
+                        send_to_kdb<Y>(raw);
                     }
                     else
                     {
                         std::this_thread::yield();
                     }
                 }
-     
+            }
+
+            template <typename Y>
+            void send_to_kdb (Y raw)
+            {
+
             }
     };
 }

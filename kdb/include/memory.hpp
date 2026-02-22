@@ -12,6 +12,7 @@
 #include <common/report.hpp>
 #include <common/trade.hpp>
 #include <common/candle.hpp>
+#include <common/spsc_memory_struct.hpp>
 #include <common/order.hpp>
 
 namespace memory
@@ -20,14 +21,6 @@ namespace memory
     {
         static constexpr int BUFFER_CAPACITY = 16384;
     }
-    template <typename T> struct memory_layout
-    {
-        volatile uint64_t write_idx;
-        uint8_t           pad1[56];
-        volatile uint64_t read_idx;
-        uint8_t           pad2[56];
-        T                 buffer[global::BUFFER_CAPACITY];
-    };
 
     enum class Mem_flags
     {
@@ -38,15 +31,15 @@ namespace memory
     class Memory
     {
         private:
-            memory_layout<common::Report>* report_mem ;
-            memory_layout<common::Order>* order_mem ;
-            memory_layout<common::Trade>* trade_mem ;
-            memory_layout<common::Candle>* candle_mem ;
+            common::memory_struct<common::Report>* report_mem ;
+            common::memory_struct<common::Order>* order_mem ;
+            common::memory_struct<common::Trade>* trade_mem ;
+            common::memory_struct<common::Candle>* candle_mem ;
 
-            memory_layout<common::Report>* report_mem_prod;
-            memory_layout<common::Order>* order_mem_prod;
-            memory_layout<common::Trade>* trade_mem_prod;
-            memory_layout<common::Candle>* candle_mem_prod;
+            common::memory_struct<common::Report>* report_mem_prod;
+            common::memory_struct<common::Order>* order_mem_prod;
+            common::memory_struct<common::Trade>* trade_mem_prod;
+            common::memory_struct<common::Candle>* candle_mem_prod;
 
         public:
             template <typename T> 
@@ -90,19 +83,19 @@ namespace memory
 
             void connect()
             {
-                report_mem = mem_map<memory_layout<common::Report>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                order_mem = mem_map<memory_layout<common::Order>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                trade_mem = mem_map<memory_layout<common::Trade>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                candle_mem = mem_map<memory_layout<common::Candle>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                report_mem = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                order_mem = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                trade_mem = mem_map<common::memory_struct<common::Trade>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                candle_mem = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
 
-                report_mem_prod = mem_map<memory_layout<common::Report>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                order_mem_prod = mem_map<memory_layout<common::Order>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                trade_mem_prod = mem_map<memory_layout<common::Trade>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                candle_mem_prod = mem_map<memory_layout<common::Candle>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                report_mem_prod = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                order_mem_prod = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                trade_mem_prod = mem_map<common::memory_struct<common::Trade>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                candle_mem_prod = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
             }
 
             template <typename T, typename Y>
-            T read_spsc(T* mem_lay, T* mem_lay_prod)
+            void read_spsc(T* mem_lay, T* mem_lay_prod)
             {
                 uint64_t local_read_idx = mem_lay->write_idx;
                 mem_lay->read_idx    = local_read_idx;
@@ -115,7 +108,7 @@ namespace memory
                     {
                         int slot = local_read_idx % 16384;
                         Y raw  = mem_lay->buffer[slot];
-                        // Send to a producer.
+                        write_spsc(mem_lay_prod, raw);
                     }
                     else
                     {
@@ -125,7 +118,7 @@ namespace memory
             }
 
             template <typename T, typename Y>
-            T write_spsc(T* mem_lay_prod, Y mem)
+            void write_spsc(T* mem_lay_prod, Y mem)
             {
                 uint64_t local_write_idx = mem_lay_prod->write_idx;
                 uint64_t cached_read_idx = mem_lay_prod->read_idx;
@@ -144,7 +137,13 @@ namespace memory
 
             void run()
             {
-                read_spsc<memory_layout<common::Candle>, common::Candle>(candle_mem, candle_mem_prod);
+                while (true)
+                {
+                    read_spsc<common::memory_struct<common::Candle>, common::Candle>(candle_mem, candle_mem_prod);
+                    read_spsc<common::memory_struct<common::Report>, common::Report>(report_mem, report_mem_prod);
+                    read_spsc<common::memory_struct<common::Order>, common::Order>(order_mem, order_mem_prod);
+                    read_spsc<common::memory_struct<common::Trade>, common::Trade>(trade_mem, trade_mem_prod);
+                }
             }
     };
 }

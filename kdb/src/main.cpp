@@ -13,7 +13,41 @@
  */
 
 
-int main()
-{
+#include <iostream>
+#include "q/k.h" 
 
+int main() {
+    std::cout << "Attempting to connect to kdb+ on port 5001..." << std::endl;
+
+    // Connect to localhost on port 5001 (timeout usually optional, but good practice)
+    // khpu(hostname, port, "username:password") - we leave credentials blank for now
+    int handle = khpu((char*)"localhost", 5001, (char*)"");
+
+    if (handle <= 0) {
+        std::cerr << "Failed to connect! Is kdb+ running on port 5001?" << std::endl;
+        return 1;
+    }
+
+    std::cout << "Connected successfully! Handle ID: " << handle << std::endl;
+
+    // Send a synchronous request to the kdb+ server to calculate 10 + 20
+    // The (K)0 at the end tells kdb+ there are no more arguments
+    K result = k(handle, (char*)"10 + 20", (K)0);
+
+    if (!result) {
+        std::cerr << "Network error during communication." << std::endl;
+    } else if (result->t == -128) { // -128 is the kdb+ error type
+        std::cerr << "kdb+ Server Error: " << result->s << std::endl;
+        r0(result); // Free the memory
+    } else {
+        // ->j is the accessor for a 'long' integer in k.h
+        std::cout << "Success! kdb+ calculated: 10 + 20 = " << result->j << std::endl;
+        r0(result); // Always free the result object when done!
+    }
+
+    // Close the connection
+    kclose(handle);
+    std::cout << "Connection closed." << std::endl;
+
+    return 0;
 }
