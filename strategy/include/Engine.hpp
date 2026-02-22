@@ -4,7 +4,6 @@
 #include <common/candle.hpp>
 #include "portfolio.hpp"
 #include "ring_buffer.hpp"
-#include "dashboard.hpp"
 #include <common/spsc_memory_struct.hpp>
 
 #include <chrono>
@@ -331,8 +330,6 @@ namespace strategy
         uint64_t               order_id   = 0;
 
         Portfolio portfolio;
-
-        Dashboard_state* dashboard_mem;
 
         std::vector<common::Report>                         history;
         std::unordered_map<uint64_t, common::Active_orders> active_orders;
