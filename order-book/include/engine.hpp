@@ -30,17 +30,6 @@ namespace engine
 
     namespace mem
     {
-        struct Data
-        {
-            uint64_t id;
-            uint64_t size;
-            int64_t  price;
-            int8_t   side; //sell / buy
-            int8_t   action; // cancel order
-            int8_t   status; // trade/order
-            uint8_t  pad1[1];
-        };
-
         template <typename T> struct memory_layout
         {
             volatile uint64_t write_idx;

@@ -1,0 +1,165 @@
+#pragma once
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <atomic>
+#include <iostream>
+#include <cstdint>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <thread>
+#include <unistd.h>
+
+namespace memory
+{
+    namespace global
+    {
+        static constexpr int BUFFER_CAPACITY = 16384;
+    }
+    template <typename T> struct memory_layout
+    {
+        volatile uint64_t write_idx;
+        uint8_t           pad1[56];
+        volatile uint64_t read_idx;
+        uint8_t           pad2[56];
+        T                 buffer[global::BUFFER_CAPACITY];
+    };
+
+    enum class Mem_flags
+    {
+        CONSUMER,
+        PRODUCER,
+    };
+
+    struct Report
+    {
+
+    };
+
+    struct Order
+    {
+
+    };
+
+    struct Trade
+    {
+
+    };
+
+    struct Candle 
+    {
+
+    };
+
+    class Memory
+    {
+        private:
+            memory_layout<Report>* report_mem ;
+            memory_layout<Order>* order_mem ;
+            memory_layout<Trade>* trade_mem ;
+            memory_layout<Candle>* candle_mem ;
+
+            memory_layout<Report>* report_mem_prod;
+            memory_layout<Order>* order_mem_prod;
+            memory_layout<Trade>* trade_mem_prod;
+            memory_layout<Candle>* candle_mem_prod;
+
+        public:
+            template <typename T> 
+            T* mem_map(const char* path, Mem_flags flag)
+            {
+                int fd = 0;
+                if (flag == Mem_flags::CONSUMER)
+                {
+                    while (true)
+                    {
+                        fd = open(path, O_RDWR);
+                        if (fd != -1)
+                        {
+                            struct stat st;
+                            if (fstat(fd, &st) == 0 && st.st_size >= static_cast<off_t>(sizeof(T)))
+                            {
+                                break; 
+                            }
+                            close(fd); 
+                        }
+                        sleep(1);
+                    }
+                }
+                else if (flag == Mem_flags::PRODUCER)
+                {
+                    shm_unlink(path); 
+                    fd = open(path, O_RDWR | O_CREAT, 0666);
+                    if (fd == -1) { std::cout << ("open failed"); return nullptr; }
+                    if (ftruncate(fd, sizeof(T)) == -1) { std::cout << ("ftruncate failed"); return nullptr; }
+                }
+
+                void* ptr = mmap(NULL, sizeof(T), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+                close(fd); 
+
+                if (ptr == MAP_FAILED)
+                {
+                    return nullptr;
+                }
+                return static_cast<T*>(ptr);
+            }
+
+            void connect()
+            {
+                report_mem = mem_map<memory_layout<Report>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                order_mem = mem_map<memory_layout<Order>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                trade_mem = mem_map<memory_layout<Trade>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+                candle_mem = mem_map<memory_layout<Candle>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
+
+                report_mem_prod = mem_map<memory_layout<Report>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                order_mem_prod = mem_map<memory_layout<Order>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                trade_mem_prod = mem_map<memory_layout<Trade>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                candle_mem_prod = mem_map<memory_layout<Candle>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+            }
+
+            template <typename T, typename Y>
+            T read_spsc(T* mem_lay, T* mem_lay_prod)
+            {
+                uint64_t local_read_idx = mem_lay->write_idx;
+                mem_lay->read_idx    = local_read_idx;
+
+                while (true)
+                {
+                    uint64_t current_write_idx = mem_lay->write_idx;
+
+                    if (local_read_idx < current_write_idx)
+                    {
+                        int slot = local_read_idx % 16384;
+                        Y raw  = mem_lay->buffer[slot];
+                        // Send to a producer.
+                    }
+                    else
+                    {
+                        std::this_thread::yield();
+                    }
+                }
+            }
+
+            template <typename T, typename Y>
+            T write_spsc(T* mem_lay_prod, Y mem)
+            {
+                uint64_t local_write_idx = mem_lay_prod->write_idx;
+                uint64_t cached_read_idx = mem_lay_prod->read_idx;
+
+                while (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
+                {
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                    __builtin_ia32_pause();
+                    cached_read_idx = mem_lay_prod->read_idx;
+                }
+
+                mem_lay_prod->buffer[local_write_idx % global::BUFFER_CAPACITY] = mem;
+                std::atomic_thread_fence(std::memory_order_release);
+                mem_lay_prod->write_idx = local_write_idx + 1;
+            }
+
+            void run()
+            {
+                read_spsc<memory_layout<Candle>, Candle>(candle_mem, candle_mem_prod);
+            }
+    };
+}
