@@ -4,7 +4,7 @@
 #include <sys/types.h>
 namespace common 
 {
-    enum class Order_side
+    enum Order_side
     {
         BUY,
         SELL,

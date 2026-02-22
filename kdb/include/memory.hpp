@@ -1,4 +1,5 @@
 #pragma once
+#include "common/utils.hpp"
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <atomic>
@@ -54,6 +55,7 @@ namespace memory
                         if (fd != -1)
                         {
                             struct stat st;
+                            std::cout << " here " << std::endl;
                             if (fstat(fd, &st) == 0 && st.st_size >= static_cast<off_t>(sizeof(T)))
                             {
                                 break; 
@@ -83,15 +85,15 @@ namespace memory
 
             void connect()
             {
-                report_mem = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                order_mem = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                trade_mem = mem_map<common::memory_struct<common::Trade>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
-                candle_mem = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_order", Mem_flags::CONSUMER);
 
-                report_mem_prod = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                order_mem_prod = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                trade_mem_prod = mem_map<common::memory_struct<common::Trade>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
-                candle_mem_prod = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_order", Mem_flags::PRODUCER);
+                report_mem = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_report", Mem_flags::CONSUMER);
+                order_mem = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_ring", Mem_flags::CONSUMER);
+                candle_mem = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_candle", Mem_flags::CONSUMER);
+
+                report_mem_prod = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_send_report", Mem_flags::PRODUCER);
+                order_mem_prod = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_send_order", Mem_flags::PRODUCER);
+                trade_mem_prod = mem_map<common::memory_struct<common::Trade>>("/dev/shm/hft_send_trade", Mem_flags::PRODUCER);
+                candle_mem_prod = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_send_candle", Mem_flags::PRODUCER);
             }
 
             template <typename T, typename Y>
@@ -117,17 +119,48 @@ namespace memory
                 }
             }
 
+            void read_spsc(common::memory_struct<common::Order>* mem_lay, common::Order* mem_lay_prod)
+            {
+                uint64_t local_read_idx = mem_lay->write_idx;
+                mem_lay->read_idx    = local_read_idx;
+
+                while (true)
+                {
+                    uint64_t current_write_idx = mem_lay->write_idx;
+
+                    if (local_read_idx < current_write_idx)
+                    {
+                        int slot = local_read_idx % 16384;
+                        common::Order raw  = mem_lay->buffer[slot];
+                        if (raw.status == 1)
+                        {
+                            common::Trade tr  = common::Trade{cstime::get_timestamp(), raw.size, raw.price, 
+                                (raw.side == common::Order_side::BUY) ? common::Order_type::buy : common::Order_type::sell}; 
+
+                            common::memory_struct<common::Trade>* mem = common::memory_struct<common::Trade> = common::memory_struct<common::Trade>{mem_lay->write_idx, mem_lay->read_idx, 56[0],tr};
+
+                            write_spsc(, tr);
+                        }
+                        else {
+                            write_spsc(mem_lay, raw);
+                        }
+                    }
+                    else
+                    {
+                        std::this_thread::yield();
+                    }
+                }
+            }
+
             template <typename T, typename Y>
             void write_spsc(T* mem_lay_prod, Y mem)
             {
                 uint64_t local_write_idx = mem_lay_prod->write_idx;
                 uint64_t cached_read_idx = mem_lay_prod->read_idx;
 
-                while (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
+                if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY)
                 {
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                    __builtin_ia32_pause();
-                    cached_read_idx = mem_lay_prod->read_idx;
+                    return; // drop packets if the concsumer is just too slow. losing data  but atleast its not corrupt.
                 }
 
                 mem_lay_prod->buffer[local_write_idx % global::BUFFER_CAPACITY] = mem;
@@ -143,6 +176,7 @@ namespace memory
                     read_spsc<common::memory_struct<common::Report>, common::Report>(report_mem, report_mem_prod);
                     read_spsc<common::memory_struct<common::Order>, common::Order>(order_mem, order_mem_prod);
                     read_spsc<common::memory_struct<common::Trade>, common::Trade>(trade_mem, trade_mem_prod);
+                    std::cout << "running";
                 }
             }
     };

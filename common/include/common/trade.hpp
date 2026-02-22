@@ -16,7 +16,7 @@ namespace common
     {
         uint64_t time;
         size_t size;
-        long price;
+        int64_t price;
         Order_type type;
     };
 }

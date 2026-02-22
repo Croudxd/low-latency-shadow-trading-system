@@ -7,7 +7,7 @@ namespace common
 {
     namespace rep
     {
-        enum class Status 
+        enum Status 
         {
             NEW,
             FILLED,
@@ -16,7 +16,7 @@ namespace common
             REJECTED,
         };
 
-        enum class Rejection_code
+        enum Rejection_code
         {
             NOERROR,
             NO_FUNDS,
@@ -28,14 +28,15 @@ namespace common
     struct Report 
     {
         uint64_t order_id;
-        rep::Status status;
         uint64_t last_quantity;
         uint64_t last_price;
         uint64_t leaves_quantity;
-        Order_side side;
-        rep::Rejection_code reject_code;
         uint64_t trade_id;
         uint64_t timestamp;
+
+        rep::Status status;
+        Order_side side;
+        rep::Rejection_code reject_code;
 
         void print() const
         {
