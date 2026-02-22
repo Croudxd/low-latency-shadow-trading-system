@@ -5,7 +5,7 @@
 
 TEST(add_order, check_book)
 {
-    auto sender = [&](const Rep::Report& rep) 
+    auto sender = [&](const common::Report& rep) 
     {
     };
 
@@ -46,7 +46,7 @@ TEST(add_order, check_book)
 
 TEST(cancel_order, check_book)
 {
-    auto sender = [&](const Rep::Report& rep) 
+    auto sender = [&](const common::Report& rep) 
     {
     };
 
@@ -71,7 +71,7 @@ TEST(cancel_order, check_book)
 
 TEST(check_match, check_book)
 {
-    auto sender = [&](const Rep::Report& rep) 
+    auto sender = [&](const common::Report& rep) 
     {
     };
 
@@ -96,9 +96,9 @@ TEST(execute_match, check_book)
 {
     bool maker_callback_called = false;
     uint64_t maker_fill_qty = 0;
-    Rep::Status maker_status = Rep::Status::NEW;
+    common::rep::Status maker_status = common::rep::Status::NEW;
 
-    auto sender = [&](const Rep::Report& rep) 
+    auto sender = [&](const common::Report& rep) 
     {
         maker_callback_called = true;
         maker_fill_qty = rep.last_quantity;
@@ -113,15 +113,15 @@ TEST(execute_match, check_book)
         book.add_order(ord, Flags::NONMATCH, sender); 
 
         Order ord1 = Order(Order_type::sell, 123, 12, 124);
-        Rep::Report taker_rep = book.execute(ord1, sender);
+        common::Report taker_rep = book.execute(ord1, sender);
 
         ASSERT_EQ(taker_rep.order_id, ord1.ID);
-        ASSERT_EQ(taker_rep.status, Rep::Status::FILLED); 
+        ASSERT_EQ(taker_rep.status, common::rep::Status::FILLED); 
         ASSERT_EQ(taker_rep.last_quantity, 12);          
         ASSERT_EQ(taker_rep.last_price, 123);           
 
         ASSERT_TRUE(maker_callback_called);
-        ASSERT_EQ(maker_status, Rep::Status::FILLED);  
+        ASSERT_EQ(maker_status, common::rep::Status::FILLED);  
         ASSERT_EQ(maker_fill_qty, 12);
 
         auto it = book.order_lookup.find(ord.ID);

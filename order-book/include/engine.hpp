@@ -1,16 +1,20 @@
 #pragma once
+
+#include "common/order.hpp"
+#include <common/candle.hpp>
+#include <order.hpp>
+#include <order_book.hpp>
+#include <common/spsc_memory_struct.hpp>
+#include <common/report.hpp>
+
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <atomic>
-#include <candle.hpp>
 #include <cstdint>
 #include <fcntl.h>
-#include <order.hpp>
-#include <order_book.hpp>
 #include <sys/mman.h>
 #include <thread>
 #include <unistd.h>
-#include <report.hpp>
 
 #ifdef UNIT_TEST
 class rust_feeder_handles_rust_data_Test;
@@ -30,15 +34,6 @@ namespace engine
 
     namespace mem
     {
-        template <typename T> struct memory_layout
-        {
-            volatile uint64_t write_idx;
-            uint8_t           pad1[56];
-            volatile uint64_t read_idx;
-            uint8_t           pad2[56];
-            T                 buffer[global::BUFFER_CAPACITY];
-        };
-
         enum class Mem_flags
         {
             CONSUMER,
@@ -108,7 +103,7 @@ namespace engine
             return static_cast<T*>(ptr);
         }
 
-        void send_candle(mem::memory_layout<Candle>* candle_shm, Candle candle)
+        void send_candle(common::memory_struct<common::Candle>* candle_shm, common::Candle candle)
         {
             uint64_t local_write_idx = candle_shm->write_idx;
             uint64_t cached_read_idx = candle_shm->read_idx;
@@ -124,7 +119,7 @@ namespace engine
             candle_shm->write_idx = local_write_idx + 1;
         }
 
-        void send_report(mem::memory_layout<Rep::Report>* report_mem, Rep::Report report)
+        void send_report(common::memory_struct<common::Report>* report_mem, common::Report report)
         {
             uint64_t local_write_idx = report_mem->write_idx;
             uint64_t cached_read_idx = report_mem->read_idx;
@@ -142,13 +137,13 @@ namespace engine
 
         void connect()
         {
-            candle_mem     = mem_map<mem::memory_layout<Candle>>("/dev/shm/hft_candle", mem::Mem_flags::PRODUCER);
-            report_mem     = mem_map<mem::memory_layout<Rep::Report>>("/dev/shm/hft_report", mem::Mem_flags::PRODUCER);
+            candle_mem     = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_candle", mem::Mem_flags::PRODUCER);
+            report_mem     = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_report", mem::Mem_flags::PRODUCER);
 
-            rust_order     = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_ring", mem::Mem_flags::CONSUMER);
-            strategy_order = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
+            rust_order     = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_ring", mem::Mem_flags::CONSUMER);
+            strategy_order = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
 
-            // kdb_buf = mem_map<mem::memory_layout<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
+            // kdb_buf = mem_map<mem::memory_struct<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
 
 
             rust_local_read_idx     = rust_order->write_idx;
@@ -159,7 +154,7 @@ namespace engine
         {
             uint64_t current_write_idx = strategy_order->write_idx;
 
-            auto sender = [&](const Rep::Report& rep) 
+            auto sender = [&](const common::Report& rep) 
             {
                 this->send_report(this->report_mem, rep);
             };
@@ -168,7 +163,7 @@ namespace engine
             {
                 std::atomic_thread_fence(std::memory_order_acquire);
                 int       slot = strategy_local_read_idx % global::BUFFER_CAPACITY;
-                mem::Data raw  = strategy_order->buffer[slot];
+                common::Order raw  = strategy_order->buffer[slot];
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
                 Order     ord  = { side, raw.price, raw.size, raw.id };
                 if (raw.action == 2)
@@ -195,7 +190,7 @@ namespace engine
         {
             uint64_t current_write_idx = rust_order->write_idx;
 
-            auto sender = [&](const Rep::Report& rep) 
+            auto sender = [&](const common::Report& rep) 
             {
                 this->send_report(this->report_mem, rep);
             };
@@ -203,7 +198,7 @@ namespace engine
             {
                 std::atomic_thread_fence(std::memory_order_acquire);
                 int       slot = rust_local_read_idx % global::BUFFER_CAPACITY;
-                mem::Data raw  = rust_order->buffer[slot];
+                common::Order raw  = rust_order->buffer[slot];
                 auto      side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
                 Order     ord  = { side, raw.price, raw.size, raw.id };
                 /** status = 1 is a trade not an order so we dont add to the book.*/
@@ -221,8 +216,8 @@ namespace engine
                     if (current_local_bucket_size >= global::BUCKET_SIZE)
                     {
                         long   close = raw.price;
-                        Candle candle
-                            = Candle { current_open, current_high, current_low, close, current_local_bucket_size };
+                        common::Candle candle
+                            = common::Candle { current_open, current_high, current_low, close, current_local_bucket_size };
                         send_candle(candle_mem, candle);
                         current_local_bucket_size = 0;
                         current_open              = 0;
@@ -236,7 +231,7 @@ namespace engine
                     auto taker_side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
 
                     Order dummy_taker(taker_side, raw.price, raw.size, 0);
-                    book.add_order(dummy_taker, Flags::MATCH, [](const Rep::Report& rep){ });
+                    book.add_order(dummy_taker, Flags::MATCH, [](const common::Report& rep){ });
                 }
                 else if (raw.action == 2)
                 {
@@ -269,11 +264,11 @@ namespace engine
         }
 
     private:
-        mem::memory_layout<mem::Data>* rust_order;
-        mem::memory_layout<mem::Data>* strategy_order;
-        mem::memory_layout<Candle>*    candle_mem;
-        mem::memory_layout<Rep::Report>* report_mem;
-        // mem::memory_layout<T*>* kdb_buf;
+        common::memory_struct<common::Order>* rust_order;
+        common::memory_struct<common::Order>* strategy_order;
+        common::memory_struct<common::Candle>*    candle_mem;
+        common::memory_struct<common::Report>* report_mem;
+        // mem::memory_struct<T*>* kdb_buf;
 
 
         uint64_t rust_local_read_idx     = 0;

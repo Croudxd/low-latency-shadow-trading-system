@@ -1,10 +1,9 @@
 #pragma once
 #include <unordered_map>
 #include <cstdint>
-#include <iostream>
-#include "report.hpp"
+#include "common/report.hpp"
 
-namespace backtester
+namespace strategy 
 {
     struct Portfolio
     {
@@ -41,7 +40,7 @@ namespace backtester
             return position;
         }
 
-        void update(const Report& rep, double limit_price)
+        void update(const common::Report& rep, double limit_price)
         {
             double real_limit_price = limit_price / 100.0;
             double real_last_price  = (double)rep.last_price / 100.0;
@@ -50,9 +49,9 @@ namespace backtester
             double real_leaves_qty  = (double)rep.leaves_quantity / 1000000.0;
 
 
-            if (rep.status == Status::NEW)
+            if (rep.status == common::rep::Status::NEW)
             {
-                if (rep.side == Side::BUY) 
+                if (rep.side == common::Order_side::BUY) 
                 {
                     double amount_to_lock = real_limit_price * real_leaves_qty;
                     cash -= amount_to_lock;
@@ -60,11 +59,11 @@ namespace backtester
                     order_locks[rep.order_id] = amount_to_lock;
                 }
             }
-            else if (rep.status == Status::FILLED || rep.status == Status::PARTIALLY_FILLED)
+            else if (rep.status == common::rep::Status::FILLED || rep.status == common::rep::Status::PARTIALLY_FILLED)
             {
                 double trade_value = real_last_price * real_last_qty;
                 
-                if (rep.side == Side::BUY) 
+                if (rep.side == common::Order_side::BUY) 
                 {
                     position += real_last_qty;
 

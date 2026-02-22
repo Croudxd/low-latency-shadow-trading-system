@@ -2,7 +2,7 @@
 #include "indicator.hpp"
 #include <cstddef>
 
-namespace backtester
+namespace strategy 
 {
     class SMA : public Indicator 
     {

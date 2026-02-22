@@ -9,7 +9,7 @@
 
 #include "../include/dashboard.hpp"
 
-using namespace backtester;
+using namespace strategy;
 
 int main() {
     int fd = -1;

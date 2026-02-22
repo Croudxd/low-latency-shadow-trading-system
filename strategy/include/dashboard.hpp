@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace backtester 
+namespace strategy 
 {
 
     struct Dashboard_state 

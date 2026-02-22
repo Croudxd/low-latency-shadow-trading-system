@@ -25,10 +25,10 @@ target_link_libraries(order-test PRIVATE
 )
 gtest_discover_tests(order-test)
 
-add_executable(micro-bench benchmark/micro_bench.cpp)
-target_include_directories(micro-bench PRIVATE include)
-target_link_libraries(micro-bench PRIVATE 
-    benchmark::benchmark 
-    Threads::Threads 
-    common
-)
+# add_executable(micro-bench benchmark/micro_bench.cpp)
+# target_include_directories(micro-bench PRIVATE include)
+# target_link_libraries(micro-bench PRIVATE 
+#     benchmark::benchmark 
+#     Threads::Threads 
+#     common
+# )

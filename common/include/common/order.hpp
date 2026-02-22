@@ -2,7 +2,7 @@
 #include <iostream>
 #include <cstdint>
 #include <sys/types.h>
-namespace backtester
+namespace common 
 {
     enum class Order_side
     {
@@ -33,6 +33,23 @@ namespace backtester
     {
         Order order;
         uint64_t time;
+    };
+
+    struct Active_orders 
+    {
+        uint64_t order_id;
+        uint64_t leaves_quantity;
+        uint64_t price;
+        Order_side side;
+        uint64_t timestamp;
+
+        void print() const
+        {
+            std::cout << "order_id" << order_id <<std::endl;
+            std::cout << "order_id" << order_id <<std::endl;
+            std::cout << "leaves_quantity" << leaves_quantity<<std::endl;
+            std::cout << "price" << price <<std::endl;
+        }
     };
 }
 

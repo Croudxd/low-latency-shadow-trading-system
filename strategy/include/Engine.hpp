@@ -1,10 +1,12 @@
 #pragma once
-#include "candle.hpp"
-#include "order.hpp"
+#include <common/report.hpp>
+#include <common/order.hpp>
+#include <common/candle.hpp>
 #include "portfolio.hpp"
-#include "report.hpp"
 #include "ring_buffer.hpp"
 #include "dashboard.hpp"
+#include <common/spsc_memory_struct.hpp>
+
 #include <chrono>
 #include <cstdint>
 #include "time.hpp"
@@ -23,18 +25,9 @@
 class report_function_repo_Test;
 #endif
 
-namespace backtester
+namespace strategy 
 {
     static constexpr int BUFFER_CAPACITY = 16384;
-
-    template <typename T> struct memory_struct
-    {
-        volatile uint64_t write_idx;
-        uint8_t           pad1[56];
-        volatile uint64_t read_idx;
-        uint8_t           pad2[56];
-        T                 buffer[16384];
-    };
 
     enum class MemoryFlags
     {
@@ -45,16 +38,14 @@ namespace backtester
     template <typename Strategy> 
     class Engine
     {
-
 #ifdef UNIT_TEST
     friend class ::report_function_repo_Test;
 #endif 
-
     public:
         Engine(double starting_cash, double fees)
             : portfolio(starting_cash, fees)
         {
-            ring_buffer = backtester::Ring_buffer();
+            ring_buffer = strategy::Ring_buffer();
             history.reserve(1000);
         }
         template <typename T> 
@@ -112,9 +103,9 @@ namespace backtester
 
         void connect()
         {
-            order_mem  = map_mem<memory_struct<Order>>("/dev/shm/hft_order", MemoryFlags::PRODUCER);
-            candle_mem = map_mem<memory_struct<Candle>>("/dev/shm/hft_candle", MemoryFlags::CONSUMER);
-            report_mem = map_mem<memory_struct<Report>>("/dev/shm/hft_report", MemoryFlags::CONSUMER);
+            order_mem  = map_mem<common::memory_struct<common::Order>>("/dev/shm/hft_order", MemoryFlags::PRODUCER);
+            candle_mem = map_mem<common::memory_struct<common::Candle>>("/dev/shm/hft_candle", MemoryFlags::CONSUMER);
+            report_mem = map_mem<common::memory_struct<common::Report>>("/dev/shm/hft_report", MemoryFlags::CONSUMER);
             dashboard_mem = map_mem<Dashboard_state>("/dev/shm/hft_dashboard", MemoryFlags::PRODUCER);
 
             if (dashboard_mem) 
@@ -141,7 +132,7 @@ namespace backtester
                 if (local_read_idx < current_write_idx)
                 {
                     int    slot = local_read_idx % 16384;
-                    Candle raw  = candle_mem->buffer[slot];
+                    common::Candle raw  = candle_mem->buffer[slot];
 
                     ring_buffer.add(raw);
                     local_read_idx++;
@@ -165,7 +156,7 @@ namespace backtester
                 if (local_report_read_idx < current_report_write_idx)
                 {
                     int    slot = local_report_read_idx % 16384;
-                    Report raw  = report_mem->buffer[slot];
+                    common::Report raw  = report_mem->buffer[slot];
 
                     on_report(raw);
 
@@ -184,33 +175,33 @@ namespace backtester
             this->delay = time;
         }
 
-        void order(float size, float price, Order_side side)
+        void order(float size, float price, common::Order_side side)
         {
-            if (side == Order_side::BUY)
+            if (side == common::Order_side::BUY)
             {
                 if ((price * size) > portfolio.get_cash())
                 {
                     return; 
                 }
             }
-            else if (side == Order_side::SELL)
+            else if (side == common::Order_side::SELL)
             {
                 if (size > portfolio.get_position())
                 {
                     return;
                 }
             }
-            int8_t   int_side   = (side == Order_side::BUY) ? 0 : 1;
+            int8_t   int_side   = (side == common::Order_side::BUY) ? 0 : 1;
             uint64_t p          = price * 100;
             uint64_t s          = size * 1000000;
             my_order_ids.insert(order_id);
-            Order    order           = Order(order_id++, s, p, int_side, 0, 0 /** status*/);
+            common::Order    order           = common::Order(order_id++, s, p, int_side, 0, 0 /** status*/);
             delayed_orders.emplace_back(order, get_real_time_ms() + delay);
         }
 
         void cancel_order(uint64_t target_id)
         {
-            Order    order = Order(target_id, 0 /**SIZE*/, 0 /**PRICE*/, 0 /**SIDE*/, 1 /**ACTION*/, 0 /**Status*/);
+            common::Order    order = common::Order(target_id, 0 /**SIZE*/, 0 /**PRICE*/, 0 /**SIDE*/, 1 /**ACTION*/, 0 /**Status*/);
             uint64_t local_write_idx = order_mem->write_idx;
             uint64_t cached_read_idx = order_mem->read_idx;
             if (local_write_idx - cached_read_idx >= BUFFER_CAPACITY)
@@ -231,12 +222,12 @@ namespace backtester
             warm_count = size;
         }
 
-        backtester::Ring_buffer* get_ring_buffer()
+        strategy::Ring_buffer* get_ring_buffer()
         {
             return &ring_buffer;
         }
 
-        void on_report(const Report& raw)
+        void on_report(const common::Report& raw)
         {
             if (my_order_ids.find(raw.order_id) == my_order_ids.end())
             {
@@ -248,14 +239,14 @@ namespace backtester
                 return;
             }
 
-            if (raw.status != Status::NEW)
+            if (raw.status != common::rep::Status::NEW)
                 history.push_back(raw);
 
-            if (raw.status == Status::NEW)
+            if (raw.status == common::rep::Status::NEW)
             {
                 portfolio.update(raw, (double)raw.last_price);
                 active_orders[raw.order_id]
-                    = Active_orders { raw.order_id, raw.leaves_quantity, raw.last_price, raw.side, raw.timestamp };
+                    = common::Active_orders { raw.order_id, raw.leaves_quantity, raw.last_price, raw.side, raw.timestamp };
             }
             else
             {
@@ -265,23 +256,23 @@ namespace backtester
                     double original_limit = (double)it->second.price;
                     portfolio.update(raw, original_limit);
 
-                    if (raw.status == Status::FILLED || raw.status == Status::CANCELED)
+                    if (raw.status == common::rep::Status::FILLED || raw.status == common::rep::Status::CANCELED)
                     {
                         active_orders.erase(it);
                         my_order_ids.erase(raw.order_id);
                     }
-                    else if (raw.status == Status::PARTIALLY_FILLED)
+                    else if (raw.status == common::rep::Status::PARTIALLY_FILLED)
                     {
                         it->second.leaves_quantity = raw.leaves_quantity;
                     }
                 }
                 else
                 {
-                    if (raw.status == Status::FILLED || raw.status == Status::PARTIALLY_FILLED)
+                    if (raw.status == common::rep::Status::FILLED || raw.status == common::rep::Status::PARTIALLY_FILLED)
                     {
                         portfolio.update(raw, (double)raw.last_price);
 
-                        if (raw.status == Status::FILLED)
+                        if (raw.status == common::rep::Status::FILLED)
                         {
                             my_order_ids.erase(raw.order_id);
                         }
@@ -298,7 +289,7 @@ namespace backtester
                 dashboard_mem->active_order_count = active_orders.size();
                 dashboard_mem->last_update_ts = raw.timestamp;
 
-                if (raw.status == Status::FILLED)
+                if (raw.status == common::rep::Status::FILLED)
                 {
                     dashboard_mem->total_trades+=1;
                     dashboard_mem->last_trade_price = (double)raw.last_price / 100.0;
@@ -332,9 +323,9 @@ namespace backtester
         }
 
         Strategy               strategy;
-        memory_struct<Candle>* candle_mem;
-        memory_struct<Order>*  order_mem;
-        memory_struct<Report>* report_mem;
+        common::memory_struct<common::Candle>* candle_mem;
+        common::memory_struct<common::Order>*  order_mem;
+        common::memory_struct<common::Report>* report_mem;
         Ring_buffer            ring_buffer;
         size_t                 warm_count = 0;
         uint64_t               order_id   = 0;
@@ -343,12 +334,12 @@ namespace backtester
 
         Dashboard_state* dashboard_mem;
 
-        std::vector<Report>                         history;
-        std::unordered_map<uint64_t, Active_orders> active_orders;
+        std::vector<common::Report>                         history;
+        std::unordered_map<uint64_t, common::Active_orders> active_orders;
         std::unordered_set<uint64_t>                my_order_ids;
 
-        std::deque<Delayed_order> delayed_orders;
+        std::deque<common::Delayed_order> delayed_orders;
         uint64_t delay;
 
     };
-}; // namespace backtester
+}; // namespace strategy

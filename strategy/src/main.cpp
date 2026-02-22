@@ -21,37 +21,35 @@
 
 #include "Engine.hpp"
 #include "indicator.hpp"
-#include "order.hpp"
 #include "ring_buffer.hpp"
-#include "sma.hpp"
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
 class Strategy
 {
-    backtester::SMA short_ma { 3 };
-    backtester::SMA long_ma { 12 };
+    // strategy::SMA short_ma { 3 };
+    // strategy::SMA long_ma { 12 };
 
     public:
-        void run(backtester::Ring_buffer& ring_buffer, backtester::Engine<Strategy>& engine)
+        void run(strategy::Ring_buffer& ring_buffer, strategy::Engine<Strategy>& engine)
         {
             double current_price = (double)ring_buffer.get(0).get_open();
-
-            long sma_s = short_ma.calculate(); 
-            long sma_l = long_ma.calculate();
+            //
+            // long sma_s = short_ma.calculate(); 
+            // long sma_l = long_ma.calculate();
 
             // if (sma_s > sma_l) 
             // {
-                engine.order(1.0, current_price, backtester::Order_side::BUY);
+                engine.order(1.0, current_price, common::Order_side::BUY);
             // }
         }
 };
 
 int main()
 {
-    backtester::Engine<Strategy> engine(100000000.0, 0.000001);
-    backtester::Indicator::set_ring_buffer(engine.get_ring_buffer());
+    strategy::Engine<Strategy> engine(100000000.0, 0.000001);
+    strategy::Indicator::set_ring_buffer(engine.get_ring_buffer());
     engine.connect();
     engine.run();
     return 0;

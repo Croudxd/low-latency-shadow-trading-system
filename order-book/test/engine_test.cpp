@@ -3,7 +3,7 @@
 #include "engine.hpp"
 #include "order.hpp"
 #include "order_book.hpp"
-#include "report.hpp"
+#include "common/report.hpp"
 
 template <typename T, typename Y>
 void producer(T* report_mem, Y report)
@@ -42,14 +42,14 @@ TEST(rust_feeder, handles_rust_data)
     engine::Engine engine;
     Order_book book;
 
-    auto* prod_ptr = engine.mem_map<engine::mem::memory_layout<engine::mem::Data>>(shm_path, engine::mem::Mem_flags::PRODUCER);
+    auto* prod_ptr = engine.mem_map<common::memory_struct<common::Order>>(shm_path, engine::mem::Mem_flags::PRODUCER);
     
-    engine.rust_order = engine.mem_map<engine::mem::memory_layout<engine::mem::Data>>(shm_path, engine::mem::Mem_flags::CONSUMER);
+    engine.rust_order = engine.mem_map<common::memory_struct<common::Order>>(shm_path, engine::mem::Mem_flags::CONSUMER);
     
-    engine.report_mem = engine.mem_map<engine::mem::memory_layout<Rep::Report>>(report_path, engine::mem::Mem_flags::PRODUCER);
+    engine.report_mem = engine.mem_map<common::memory_struct<common::Report>>(report_path, engine::mem::Mem_flags::PRODUCER);
 
     {
-        engine::mem::Data d = {123, 123, 123, 1, 1, 0}; 
+        common::Order d = {123, 123, 123, 1, 1, 0}; 
         producer(prod_ptr, d);
 
         engine.rust_function(book);
@@ -66,7 +66,7 @@ TEST(rust_feeder, handles_rust_data)
 
     {
         engine.capture_val = 0;
-        engine::mem::Data d1 = {124, 123, 123, 1, 1, 1}; 
+        common::Order d1 = {124, 123, 123, 1, 1, 1}; 
         producer(prod_ptr, d1);
         
         engine.rust_function(book);
@@ -77,7 +77,7 @@ TEST(rust_feeder, handles_rust_data)
 
     {
         engine.capture_val = 0;
-        engine::mem::Data d = {123, 0, 0, 1, 2, 0}; 
+        common::Order d = {123, 0, 0, 1, 2, 0}; 
         producer(prod_ptr, d);
 
         engine.rust_function(book);
@@ -98,13 +98,13 @@ TEST(strategy_order, handles_strategy_data)
     engine::Engine engine;
     Order_book book;
 
-    auto* prod_ptr = engine.mem_map<engine::mem::memory_layout<engine::mem::Data>>(shm_path, engine::mem::Mem_flags::PRODUCER);
-    engine.strategy_order = engine.mem_map<engine::mem::memory_layout<engine::mem::Data>>(shm_path, engine::mem::Mem_flags::CONSUMER);
-    engine.report_mem = engine.mem_map<engine::mem::memory_layout<Rep::Report>>(report_path, engine::mem::Mem_flags::PRODUCER);
+    auto* prod_ptr = engine.mem_map<common::memory_struct<common::Order>>(shm_path, engine::mem::Mem_flags::PRODUCER);
+    engine.strategy_order = engine.mem_map<common::memory_struct<common::Order>>(shm_path, engine::mem::Mem_flags::CONSUMER);
+    engine.report_mem = engine.mem_map<common::memory_struct<common::Report>>(report_path, engine::mem::Mem_flags::PRODUCER);
 
     {
 
-        engine::mem::Data d = {123, 123, 123, 1, 1, 0}; 
+        common::Order d = {123, 123, 123, 1, 1, 0}; 
         producer(prod_ptr, d);
 
         engine.strategy_order_func(book);
@@ -122,7 +122,7 @@ TEST(strategy_order, handles_strategy_data)
 
     {
         engine.capture_val = 0;
-        engine::mem::Data d = {123, 0, 0, 1, 2, 0}; 
+        common::Order d = {123, 0, 0, 1, 2, 0}; 
         producer(prod_ptr, d);
 
         engine.strategy_order_func(book);
@@ -143,9 +143,9 @@ TEST(send_report, report_function)
     engine::Engine engine;
     Order_book book;
 
-    engine.report_mem = engine.mem_map<engine::mem::memory_layout<Rep::Report>>(report_path, engine::mem::Mem_flags::PRODUCER);
-    auto consumer = engine.mem_map<engine::mem::memory_layout<Rep::Report>>(report_path, engine::mem::Mem_flags::CONSUMER);
-    Rep::Report rep = Rep::Report{123, Rep::Status::NEW, 123, 123 ,123 , Rep::Side::BUY, Rep::Rejection_code::NOERROR, 123 ,123 };
+    engine.report_mem = engine.mem_map<common::memory_struct<common::Report>>(report_path, engine::mem::Mem_flags::PRODUCER);
+    auto consumer = engine.mem_map<common::memory_struct<common::Report>>(report_path, engine::mem::Mem_flags::CONSUMER);
+    common::Report rep = common::Report{123, common::rep::Status::NEW, 123, 123 ,123 , common::Order_side::BUY, common::rep::Rejection_code::NOERROR, 123 ,123 };
     engine.send_report(engine.report_mem, rep);
 
     ASSERT_EQ(consumer->read_idx, engine.report_mem->read_idx);
@@ -169,10 +169,10 @@ TEST(send_candle, candle_function)
     engine::Engine engine;
     Order_book book;
 
-    engine.candle_mem = engine.mem_map<engine::mem::memory_layout<Candle>>(candle_path, engine::mem::Mem_flags::PRODUCER);
-    auto consumer = engine.mem_map<engine::mem::memory_layout<Candle>>(candle_path, engine::mem::Mem_flags::CONSUMER);
+    engine.candle_mem = engine.mem_map<common::memory_struct<common::Candle>>(candle_path, engine::mem::Mem_flags::PRODUCER);
+    auto consumer = engine.mem_map<common::memory_struct<common::Candle>>(candle_path, engine::mem::Mem_flags::CONSUMER);
 
-    Candle can = Candle{123, 123, 123, 123, 123};
+    common::Candle can = common::Candle{123, 123, 123, 123, 123};
 
     engine.send_candle(engine.candle_mem, can);
 

@@ -9,9 +9,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/order.hpp"
 #include "order.hpp"
-#include "report.hpp"
-#include "trade.hpp"
+#include "common/report.hpp"
+#include "common/trade.hpp"
+
 #include "utils.hpp"
 
 #ifdef UNIT_TEST
@@ -52,7 +54,7 @@ class Order_book
     std::map<int64_t, std::deque<Order>>  asks;
     std::map<int64_t, std::deque<Order>>* lookup[2];
 
-    std::vector<Trade>                      trade_history;
+    std::vector<common::Trade>                      trade_history;
     std::unordered_map<size_t, Order_entry> order_lookup;
     uint64_t                                trade_id = 0;
 
@@ -75,9 +77,9 @@ public:
                     break;
                 }
 
-                Rep::Report repo = execute(order, on_report);
+                common::Report repo = execute(order, on_report);
 
-                if (repo.status == Rep::Status::FILLED || repo.status == Rep::Status::PARTIALLY_FILLED)
+                if (repo.status == common::rep::Status::FILLED || repo.status == common::rep::Status::PARTIALLY_FILLED)
                 {
                     on_report(repo);
                 }
@@ -110,8 +112,8 @@ public:
 
             order_lookup[saved_id] = Order_entry { stored_ptr, is_buy };
 
-            Rep::Report rep(saved_id, Rep::Status::NEW, 0, 0, order.size, (is_buy ? Rep::Side::BUY : Rep::Side::SELL),
-                Rep::Rejection_code::NOERROR, 0, 0);
+            common::Report rep(saved_id, common::rep::Status::NEW, 0, 0, order.size, (is_buy ? common::Order_side::BUY : common::Order_side::SELL),
+                common::rep::Rejection_code::NOERROR, 0, 0);
             on_report(rep);
         }
     }
@@ -150,21 +152,21 @@ public:
             order_ptr->active = false;
         }
 
-        Rep::Report report(ID, Rep::Status::CANCELLED, 0, 0, 0, (is_buy ? Rep::Side::BUY : Rep::Side::SELL),
-            Rep::Rejection_code::NOERROR, 0, cstime::get_timestamp());
+        common::Report report(ID, common::rep::Status::CANCELED, 0, 0, 0, (is_buy ? common::Order_side::BUY : common::Order_side::SELL),
+            common::rep::Rejection_code::NOERROR, 0, cstime::get_timestamp());
         on_report(report);
 
         order_lookup.erase(lookup_it);
     }
 
-    std::vector<Trade> get_trade_history()
+    std::vector<common::Trade> get_trade_history()
     {
         return this->trade_history;
     }
 
 private:
     template <typename Func> 
-    Rep::Report execute(Order& taker, Func on_report)
+    common::Report execute(Order& taker, Func on_report)
     {
         bool  is_buy_taker = (taker.type == Order_type::buy);
         auto* book_side    = (is_buy_taker) ? &asks : &bids;
@@ -216,9 +218,9 @@ private:
             total_filled += trade_qty;
             trade_id++;
 
-            Rep::Status maker_status = (maker.size == 0) ? Rep::Status::FILLED : Rep::Status::PARTIALLY_FILLED;
-            Rep::Report maker_rep(maker.ID, maker_status, trade_qty, trade_price, maker.size,
-                (is_buy_taker ? Rep::Side::SELL : Rep::Side::BUY), Rep::Rejection_code::NOERROR, trade_id,
+            common::rep::Status maker_status = (maker.size == 0) ? common::rep::Status::FILLED : common::rep::Status::PARTIALLY_FILLED;
+            common::Report maker_rep(maker.ID, maker_status, trade_qty, trade_price, maker.size,
+                (is_buy_taker ? common::Order_side::SELL : common::Order_side::BUY), common::rep::Rejection_code::NOERROR, trade_id,
                 cstime::get_timestamp());
             on_report(maker_rep);
 
@@ -233,10 +235,10 @@ private:
             }
         }
 
-        Rep::Status taker_status = (taker.size == 0) ? Rep::Status::FILLED : Rep::Status::PARTIALLY_FILLED;
+        common::rep::Status taker_status = (taker.size == 0) ? common::rep::Status::FILLED : common::rep::Status::PARTIALLY_FILLED;
 
-        return Rep::Report(taker.ID, taker_status, total_filled, last_exec_price, taker.size,
-            (is_buy_taker ? Rep::Side::BUY : Rep::Side::SELL), Rep::Rejection_code::NOERROR, trade_id,
+        return common::Report(taker.ID, taker_status, total_filled, last_exec_price, taker.size,
+            (is_buy_taker ? common::Order_side::BUY : common::Order_side::SELL), common::rep::Rejection_code::NOERROR, trade_id,
             cstime::get_timestamp());
     }
 };

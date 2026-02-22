@@ -1,13 +1,13 @@
 add_executable(strategy src/main.cpp)
-target_include_directories(strategy PRIVATE include)
+target_include_directories(strategy PUBLIC include)
 target_link_libraries(strategy PRIVATE Threads::Threads common)
 
 add_executable(viewer src/viewer.cpp)
-target_include_directories(viewer PRIVATE include)
+target_include_directories(viewer PUBLIC include)
 target_link_libraries(viewer PRIVATE Threads::Threads common)
 
 add_executable(engine_test test/test_engine.cpp) 
-target_include_directories(engine_test PRIVATE include)
+target_include_directories(engine_test PUBLIC include)
 target_compile_definitions(engine_test PRIVATE UNIT_TEST) 
 target_link_libraries(engine_test PRIVATE 
     GTest::gtest_main 
