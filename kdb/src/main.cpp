@@ -19,21 +19,22 @@
 
 int main() 
 {
+    std::cout << "Starting memory mapper..." << std::endl;
     memory::Memory mem = memory::Memory();
     mem.connect();
+    std::cout << "✅ Memory mapped successfully!" << std::endl;
+    
     network::Sender sen = network::Sender();
     sen.connect();
 
-    std::thread sender_thread([&sen]() 
-    {
+    std::thread sender_thread([&sen]() {
+        std::cout << "✅ Network thread running..." << std::endl;
         sen.run(); 
     });
 
+    std::cout << "✅ Main relay loop running..." << std::endl;
     mem.run();
 
-    if (sender_thread.joinable()) 
-    {
-        sender_thread.join();
-    }
+    if (sender_thread.joinable()) sender_thread.join();
     return 0;
 }

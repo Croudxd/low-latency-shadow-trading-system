@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/order.hpp"
+#include "utils.hpp"
 #include <common/candle.hpp>
 #include <order.hpp>
 #include <order_book.hpp>
@@ -143,7 +144,6 @@ namespace engine
             rust_order     = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_ring", mem::Mem_flags::CONSUMER);
             strategy_order = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
 
-            // kdb_buf = mem_map<mem::memory_struct<mem::Data>>("/dev/shm/hft_order", mem::Mem_flags::CONSUMER);
 
 
             rust_local_read_idx     = rust_order->write_idx;
@@ -168,6 +168,7 @@ namespace engine
                 Order     ord  = { side, raw.price, raw.size, raw.id };
                 if (raw.action == 2)
                 {
+
                     book.cancel_order(raw.id, sender);
                     #ifdef UNIT_TEST
                     capture_val = 1;
@@ -217,17 +218,17 @@ namespace engine
                     {
                         long   close = raw.price;
                         common::Candle candle
-                            = common::Candle { current_open, current_high, current_low, close, current_local_bucket_size };
+                            = common::Candle { current_open, current_high, current_low, close, current_local_bucket_size, cstime::get_timestamp()};
                         send_candle(candle_mem, candle);
                         current_local_bucket_size = 0;
                         current_open              = 0;
                         current_high              = 0;
                         current_low               = std::numeric_limits<long>::max();
+                        candle.print();
                     }
                     #ifdef UNIT_TEST
                     this->capture_val = 1;
                     #endif
-
                     auto taker_side = (raw.side == 0) ? Order_type::buy : Order_type::sell;
 
                     Order dummy_taker(taker_side, raw.price, raw.size, 0);
@@ -268,8 +269,6 @@ namespace engine
         common::memory_struct<common::Order>* strategy_order;
         common::memory_struct<common::Candle>*    candle_mem;
         common::memory_struct<common::Report>* report_mem;
-        // mem::memory_struct<T*>* kdb_buf;
-
 
         uint64_t rust_local_read_idx     = 0;
         uint64_t strategy_local_read_idx = 0;

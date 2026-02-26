@@ -1,6 +1,7 @@
 #pragma once
 #include "memory.hpp"
 #include <common/spsc_memory_struct.hpp>
+#include <immintrin.h>
 #include <common/report.hpp>
 #include <common/candle.hpp>
 #include <common/trade.hpp>
@@ -38,31 +39,21 @@ namespace network
             }
             
             template <typename T, typename Y>
-            T read_spsc(T* mem_lay)
+            void read_spsc(T* mem_lay)
             {
-                uint64_t local_read_idx = mem_lay->write_idx;
-                mem_lay->read_idx    = local_read_idx;
+                uint64_t local_read_idx = mem_lay->read_idx;
 
-                while (true)
+                while (local_read_idx < mem_lay->write_idx)
                 {
-                    uint64_t current_write_idx = mem_lay->write_idx;
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                    int slot = local_read_idx % 16384;
+                    const Y& raw = mem_lay->buffer[slot];
 
-                    if (local_read_idx < current_write_idx)
-                    {
-
-                        std::atomic_thread_fence(std::memory_order_acquire);
-                        int slot = local_read_idx % 16384;
-                        Y raw  = mem_lay->buffer[slot];
-
-                        send_to_kdb<Y>(raw);
-                        local_read_idx++;
-                        std::atomic_thread_fence(std::memory_order_release);
-                        mem_lay->read_idx = local_read_idx;
-                    }
-                    else
-                    {
-                        std::this_thread::yield();
-                    }
+                    send_to_kdb<Y>(raw);
+                    local_read_idx++;
+                    
+                    std::atomic_thread_fence(std::memory_order_release);
+                    mem_lay->read_idx = local_read_idx;
                 }
             }
 
@@ -72,19 +63,46 @@ namespace network
             }
 
             K pack_for_kdb(const common::Candle& raw) {
-                return knk(5, kj(raw.open), kj(raw.high), kj(raw.low), kj(raw.close), kj(raw.volume));
+                return knk(
+                        7,
+                        ks((char*)"ETH"),
+                        kj(raw.open),
+                        kj(raw.high),
+                        kj(raw.low), 
+                        kj(raw.close),
+                        kj(raw.volume), 
+                        kj(raw.time));
             }
 
             K pack_for_kdb(const common::Order& raw) {
-                return knk(6, kj(raw.id), kj(raw.size), kj(raw.price), kg(raw.side), kg(raw.action), kg(raw.status));
+                return knk(6,
+                        kj(raw.id),
+                        kj(raw.size),
+                        kj(raw.price), 
+                        kg(raw.side), 
+                        kg(raw.action), 
+                        kg(raw.status));
             }
 
             K pack_for_kdb(const common::Report& raw) {
-                return knk(9, kj(raw.order_id), kj(raw.last_quantity), kj(raw.last_price), kj(raw.leaves_quantity), kj(raw.trade_id), kj(raw.timestamp), kg(raw.status), kg(raw.side), kg(raw.reject_code));
+                return knk(9,
+                        kj(raw.order_id), 
+                        kj(raw.last_quantity), 
+                        kj(raw.last_price), 
+                        kj(raw.leaves_quantity), 
+                        kj(raw.trade_id),
+                        kj(raw.timestamp), 
+                        kg(raw.status), 
+                        kg(raw.side), 
+                        kg(raw.reject_code));
             }
 
             K pack_for_kdb(const common::Trade& raw) {
-                return knk(4, kj(raw.time), kj(raw.size), kj(raw.price), kj(raw.type));
+                return knk(4,
+                        kj(raw.time),
+                        kj(raw.size), 
+                        kj(raw.price), 
+                        kg(raw.type));
             }
 
             const char* get_table_name(const common::Candle&) { return "candle"; }
@@ -93,27 +111,24 @@ namespace network
             const char* get_table_name(const common::Trade&)  { return "trade"; }
 
             template <typename Y>
-            void send_to_kdb (Y raw)
+            void send_to_kdb (const Y& raw)
             {
                 K data_list = pack_for_kdb(raw);
-                K result = k(-handle, (char*)"insert", ks((char*)get_table_name(raw)), data_list, (K)0);
+                
+                K result = k(handle, (char*)"insert", ks((char*)get_table_name(raw)), data_list, (K)0);
 
-                if (!result) 
+                if (result && result->t == -128) 
                 {
-                    std::cerr << "Network error during communication." << std::endl;
-                } 
-                else if (result->t == -128) 
-                { 
+                    std::cerr << "🚨 KDB+ REJECTED DATA: " << result->s << std::endl;
                     r0(result);
                 }
-                else 
+                else if (result)
                 {
-                    r0(result); 
+                    r0(result);
                 }
-
             }
 
-            void run()
+            void run() 
             {
                 while (true)
                 {
@@ -121,6 +136,7 @@ namespace network
                     read_spsc<common::memory_struct<common::Candle>, common::Candle>(candle_mem);
                     read_spsc<common::memory_struct<common::Trade>, common::Trade>(trade_mem);
                     read_spsc<common::memory_struct<common::Order>, common::Order>(order_mem);
+                    _mm_pause();
                 }
             }
     };
