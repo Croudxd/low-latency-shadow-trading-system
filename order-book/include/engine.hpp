@@ -29,7 +29,7 @@ namespace engine
 {
     namespace global
     {
-        static constexpr int BUCKET_SIZE     = 1 * 100000;
+        static constexpr int BUCKET_SIZE     = 50 * 100000;
         static constexpr int BUFFER_CAPACITY = 16384;
     } // namespace global
 
