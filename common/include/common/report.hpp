@@ -38,6 +38,14 @@ namespace common
         Order_side side;
         rep::Rejection_code reject_code;
 
+        Report() = default;
+        Report(uint64_t id, rep::Status stat, uint64_t l_qty, uint64_t l_px, 
+               uint64_t leaves, Order_side s, rep::Rejection_code rej, 
+               uint64_t t_id, uint64_t ts)
+            : order_id(id), last_quantity(l_qty), last_price(l_px), 
+              leaves_quantity(leaves), trade_id(t_id), timestamp(ts),
+              status(stat), side(s), reject_code(rej) {}
+
         void print() const
         {
             std::string s = (status == rep::Status::CANCELED) ? "cancelled" : "fuck knows";

@@ -110,7 +110,6 @@ TEST(cancel_order, cancel_order)
 TEST(report_function, repo)
 {
     strategy::Engine<Strategy> engine(100000000.0, 0.0);
-    engine.dashboard_mem = nullptr;
     engine.my_order_ids.insert(1001);
 
     common::Report new_rep(1001, common::rep::Status::NEW, 0, 10000, 1000000, common::Order_side::BUY, common::rep::Rejection_code::NOERROR, 0, 100);

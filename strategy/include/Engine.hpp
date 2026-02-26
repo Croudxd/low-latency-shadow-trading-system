@@ -105,13 +105,7 @@ namespace strategy
             order_mem  = map_mem<common::memory_struct<common::Order>>("/dev/shm/hft_order", MemoryFlags::PRODUCER);
             candle_mem = map_mem<common::memory_struct<common::Candle>>("/dev/shm/hft_candle", MemoryFlags::CONSUMER);
             report_mem = map_mem<common::memory_struct<common::Report>>("/dev/shm/hft_report", MemoryFlags::CONSUMER);
-            dashboard_mem = map_mem<Dashboard_state>("/dev/shm/hft_dashboard", MemoryFlags::PRODUCER);
 
-            if (dashboard_mem) 
-            {
-                dashboard_mem->cash = portfolio.starting_cash;
-                dashboard_mem->active_order_count = 0;
-            }
         }
 
         void run()
@@ -276,23 +270,6 @@ namespace strategy
                             my_order_ids.erase(raw.order_id);
                         }
                     }
-                }
-            }
-
-            if (dashboard_mem)
-            {
-                dashboard_mem->cash = portfolio.cash;
-                dashboard_mem->locked_cash = portfolio.locked_cash;
-                dashboard_mem->position = portfolio.position;
-                dashboard_mem->total_fees = portfolio.total_fees;
-                dashboard_mem->active_order_count = active_orders.size();
-                dashboard_mem->last_update_ts = raw.timestamp;
-
-                if (raw.status == common::rep::Status::FILLED)
-                {
-                    dashboard_mem->total_trades+=1;
-                    dashboard_mem->last_trade_price = (double)raw.last_price / 100.0;
-                    dashboard_mem->last_trade_id = raw.order_id;
                 }
             }
         }

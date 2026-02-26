@@ -55,7 +55,6 @@ namespace memory
                         if (fd != -1)
                         {
                             struct stat st;
-                            std::cout << " here " << std::endl;
                             if (fstat(fd, &st) == 0 && st.st_size >= static_cast<off_t>(sizeof(T)))
                             {
                                 break; 
@@ -137,9 +136,10 @@ namespace memory
                             common::Trade tr  = common::Trade{cstime::get_timestamp(), raw.size, raw.price, 
                                 (raw.side == common::Order_side::BUY) ? common::Order_type::buy : common::Order_type::sell}; 
 
-                            common::memory_struct<common::Trade>* mem = common::memory_struct<common::Trade> = common::memory_struct<common::Trade>{mem_lay->write_idx, mem_lay->read_idx, 56[0],tr};
+                            common::memory_struct<common::Trade> local_mem = {mem_lay->write_idx, {0}, mem_lay->read_idx, {0}, {tr}};
+                            common::memory_struct<common::Trade>* mem = &local_mem;
 
-                            write_spsc(, tr);
+                            write_spsc(mem, tr);
                         }
                         else {
                             write_spsc(mem_lay, raw);
