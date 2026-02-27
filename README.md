@@ -1,17 +1,11 @@
 # HFT Core: Ultra-Low Latency C++ Trading Engine
 
 A modular, high-frequency trading (HFT) infrastructure built in C++. It utilizes **Shared Memory (IPC)** and **Lock-Free Ring Buffers** to achieve nanosecond-level latency and throughput exceeding 100 million orders per second.
+- - -
 
 ## Performance Benchmarks
 
 The system operates at the speed of the CPU cache, effectively removing software overhead.
-
-| Metric | Result | Meaning |
-| :--- | :--- | :--- |
-| **Tick-to-Trade Latency** | **~26 nanoseconds** | The time it takes for the Strategy to read a price, calculate indicators, and decide to buy. For context, light travels only ~7.8 meters in this time. |
-| **Engine Throughput** | **~101 Million Orders/sec** | The number of orders the system can transport and ingest locally. This is significantly faster than any crypto exchange matching engine (which typically handle 100k-500k/sec). |
-
-**Conclusion:** The software stack is no longer the bottleneck. The speed limit is now determined exclusively by the Network Latency (Internet) and the Exchange's API limits.
 
 ---
 
@@ -25,13 +19,33 @@ graph LR
     B -- Candle IPC --> C[Strategy engine]
     C -- Order IPC  --> B
     B -- Report IPC --> C
-    C -- Dashboard IPC --> D[Viewer UI]
-
+    A -- Order IPC --> D[KDB feeder] 
+    B -- Candle IPC --> D[KDB feeder]
+    B -- Report IPC --> D[KDB feeder]
+    D -- KDB IPC --> E[KDB]
+    E -- Viewer IPC --> F[Viewer]
 ```
+
+More realistically, the KDB feeder will read the SPSC communicating from  The gateway to the order book (for orders/trades). And the Order-book and strategy for Candles and reports. This is due to not wanting to slow down the simulation for any means, i would rather lose data than slow down the sim.
+
+The KDB feeder is also split into two, we have a reader, that reads from the SPSCs, and then spits into another SPSC which is read and sent to the KDB.
+
+## Benchmarks
+// To be updated
+
+| Metric | Result | Meaning |
+| :--- | :--- | :--- |
+| **Tick-to-Trade Latency** | **~26 nanoseconds** | The time it takes for the Strategy to read a price, calculate indicators, and decide to buy. For context, light travels only ~7.8 meters in this time. |
+| **Engine Throughput** | **~101 Million Orders/sec** | The number of orders the system can transport and ingest locally. This is significantly faster than any crypto exchange matching engine (which typically handle 100k-500k/sec). |
+
+**Conclusion:** The software stack is no longer the bottleneck. The speed limit is now determined exclusively by the Network Latency (Internet) and the Exchange's API limits.
+
 ### To run
 
 ```bash
-./run.sh
+make all -- build
+make run -- run
+make stop -- to clean up.
 ```
 this will build and then run the program.
 
