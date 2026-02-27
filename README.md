@@ -8,15 +8,15 @@ The project is decoupled into independent processes that communicate via **Memor
 
 ```mermaid
 graph LR
-    A[Market Data Gateway] -- Order IPC --> B[Order-Book]
-    B -- Candle IPC --> C[Strategy engine]
+    A[Market Data Gateway (Rust) ] -- Order IPC --> B[Order-Book (C++)]
+    B -- Candle IPC --> C[Strategy engine(C++)]
     C -- Order IPC  --> B
     B -- Report IPC --> C
-    A -- Order IPC --> D[KDB feeder] 
-    B -- Candle IPC --> D[KDB feeder]
-    B -- Report IPC --> D[KDB feeder]
-    D -- KDB IPC --> E[KDB]
-    E -- Viewer IPC --> F[Viewer]
+    A -- Order IPC --> D[KDB feeder(C++)] 
+    B -- Candle IPC --> D[KDB feeder(C++)]
+    B -- Report IPC --> D[KDB feeder(C++)]
+    D -- KDB IPC --> E[KDB(q]
+    E -- Viewer IPC --> F[Viewer(Python)]
 ```
 
 More realistically, the KDB feeder will read the SPSC communicating from  The gateway to the order book (for orders/trades). And the Order-book and strategy for Candles and reports. This is due to not wanting to slow down the simulation for any means, i would rather lose data than slow down the sim.
