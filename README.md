@@ -2,13 +2,6 @@
 
 A modular, high-frequency trading (HFT) infrastructure built in C++. It utilizes **Shared Memory (IPC)** and **Lock-Free Ring Buffers** to achieve nanosecond-level latency and throughput exceeding 100 million orders per second.
 - - -
-
-## Performance Benchmarks
-
-The system operates at the speed of the CPU cache, effectively removing software overhead.
-
----
-
 ## System Architecture
 
 The project is decoupled into independent processes that communicate via **Memory Mapped Files (`/dev/shm`)**. This allows the Strategy and Engine to run on separate CPU cores without context-switching overhead.
@@ -31,6 +24,7 @@ More realistically, the KDB feeder will read the SPSC communicating from  The ga
 The KDB feeder is also split into two, we have a reader, that reads from the SPSCs, and then spits into another SPSC which is read and sent to the KDB.
 
 ## Benchmarks
+
 // To be updated
 
 | Metric | Result | Meaning |
