@@ -22,6 +22,8 @@ all:
 	cd build && cmake .. && make -j
 
 test:
+	mkdir strategy order-book -p build
+	cd build && cmake .. && make -j
 	$(ENGINE_TEST_PATH)
 	$(ORDER_TEST_PATH)
 	$(STRATEGY_TEST_PATH)
