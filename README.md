@@ -8,15 +8,15 @@ The project is decoupled into independent processes that communicate via **Memor
 
 ```mermaid
 graph LR
-    A[Market Data Gateway (Rust) ] -- Order IPC --> B[Order-Book (C++)]
-    B -- Candle IPC --> C[Strategy engine(C++)]
-    C -- Order IPC  --> B
+    A[Market Data Gateway - Rust] -- Order IPC --> B[Order-Book - C++]
+    B -- Candle IPC --> C[Strategy engine - C++]
+    C -- Order IPC --> B
     B -- Report IPC --> C
-    A -- Order IPC --> D[KDB feeder(C++)] 
-    B -- Candle IPC --> D[KDB feeder(C++)]
-    B -- Report IPC --> D[KDB feeder(C++)]
-    D -- KDB IPC --> E[KDB(q]
-    E -- Viewer IPC --> F[Viewer(Python)]
+    A -- Order IPC --> D[KDB feeder - C++]
+    B -- Candle IPC --> D
+    B -- Report IPC --> D
+    D -- KDB IPC --> E[KDB - q]
+    E -- Viewer IPC --> F[Viewer - Python]
 ```
 
 More realistically, the KDB feeder will read the SPSC communicating from  The gateway to the order book (for orders/trades). And the Order-book and strategy for Candles and reports. This is due to not wanting to slow down the simulation for any means, i would rather lose data than slow down the sim.
@@ -24,7 +24,7 @@ More realistically, the KDB feeder will read the SPSC communicating from  The ga
 The KDB feeder is also split into two, we have a reader, that reads from the SPSCs, and then spits into another SPSC which is read and sent to the KDB.
 
 ## Benchmarks
-
+- - -
 // To be updated
 
 | Metric | Result | Meaning |
@@ -35,7 +35,7 @@ The KDB feeder is also split into two, we have a reader, that reads from the SPS
 **Conclusion:** The software stack is no longer the bottleneck. The speed limit is now determined exclusively by the Network Latency (Internet) and the Exchange's API limits.
 
 ### To run
-
+- - -
 ```bash
 make all -- build
 make run -- run
@@ -48,8 +48,8 @@ this will build and then run the program.
 If you want to change the strategy that is used go to the main.cpp in /strategy/src/main.cpp
 Here you can add pretty much anything
 
-
-# Strategy Framework – Minimal Wiki
+- - -
+# Strategy Framework
 
 This is a C++ backtesting framework built around:
 
