@@ -1,4 +1,5 @@
 #pragma once
+#include "common/portfolio.hpp"
 #include "memory.hpp"
 #include <common/spsc_memory_struct.hpp>
 #include <immintrin.h>
@@ -17,6 +18,7 @@ namespace network
             common::memory_struct<common::Candle>* candle_mem;
             common::memory_struct<common::Trade>* trade_mem;
             common::memory_struct<common::Order>* order_mem;
+            common::memory_struct<common::Portfolio_state>* portfolio_mem;
             int handle;
 
         public:
@@ -36,6 +38,7 @@ namespace network
                 order_mem = mem.mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_send_order", memory::Mem_flags::CONSUMER);
                 trade_mem = mem.mem_map<common::memory_struct<common::Trade>>("/dev/shm/hft_send_trade", memory::Mem_flags::CONSUMER);
                 candle_mem = mem.mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_send_candle", memory::Mem_flags::CONSUMER);
+                portfolio_mem = mem.mem_map<common::memory_struct<common::Portfolio_state>>("/dev/shm/hft_send_portfolio", memory::Mem_flags::CONSUMER);
             }
             
             template <typename T, typename Y>
@@ -74,6 +77,15 @@ namespace network
                         kj(raw.time));
             }
 
+            K pack_for_kdb(const common::Portfolio_state& raw) {
+                return knk(5,
+                        kf(raw.cash),
+                        kf(raw.locked_cash),
+                        kf(raw.position),
+                        kf(raw.total_fees),
+                        kf(raw.equity));
+            }
+
             K pack_for_kdb(const common::Order& raw) {
                 return knk(6,
                         kj(raw.id),
@@ -108,6 +120,7 @@ namespace network
             const char* get_table_name(const common::Candle&) { return "candle"; }
             const char* get_table_name(const common::Order&)  { return "order"; }
             const char* get_table_name(const common::Report&) { return "report"; }
+            const char* get_table_name(const common::Portfolio_state&) { return "portfolio"; }
             const char* get_table_name(const common::Trade&)  { return "trade"; }
 
             template <typename Y>
@@ -136,6 +149,7 @@ namespace network
                     read_spsc<common::memory_struct<common::Candle>, common::Candle>(candle_mem);
                     read_spsc<common::memory_struct<common::Trade>, common::Trade>(trade_mem);
                     read_spsc<common::memory_struct<common::Order>, common::Order>(order_mem);
+                    read_spsc<common::memory_struct<common::Portfolio_state>, common::Portfolio_state>(portfolio_mem);
                     _mm_pause();
                 }
             }

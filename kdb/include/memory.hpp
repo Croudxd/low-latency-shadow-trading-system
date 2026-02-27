@@ -13,6 +13,7 @@
 
 #include <common/report.hpp>
 #include <common/trade.hpp>
+#include <common/portfolio.hpp>
 #include <common/candle.hpp>
 #include <common/spsc_memory_struct.hpp>
 #include <common/order.hpp>
@@ -36,12 +37,13 @@ namespace memory
             common::memory_struct<common::Report>* report_mem = nullptr;
             common::memory_struct<common::Order>* order_mem = nullptr;
             common::memory_struct<common::Candle>* candle_mem = nullptr;
-            // Removed trade_mem consumer since trades are generated from filled orders
+            common::memory_struct<common::Portfolio_state>* portfolio_mem = nullptr;
 
             common::memory_struct<common::Report>* report_mem_prod = nullptr;
             common::memory_struct<common::Order>* order_mem_prod = nullptr;
             common::memory_struct<common::Trade>* trade_mem_prod = nullptr;
             common::memory_struct<common::Candle>* candle_mem_prod = nullptr;
+            common::memory_struct<common::Portfolio_state>* portfolio_mem_prod = nullptr;
 
         public:
             template <typename T> 
@@ -85,11 +87,13 @@ namespace memory
                 report_mem = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_report", Mem_flags::CONSUMER);
                 order_mem = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_ring", Mem_flags::CONSUMER);
                 candle_mem = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_candle", Mem_flags::CONSUMER);
+                portfolio_mem = mem_map<common::memory_struct<common::Portfolio_state>>("/dev/shm/hft_portfolio", Mem_flags::CONSUMER);
 
                 report_mem_prod = mem_map<common::memory_struct<common::Report>>("/dev/shm/hft_send_report", Mem_flags::PRODUCER);
                 order_mem_prod = mem_map<common::memory_struct<common::Order>>("/dev/shm/hft_send_order", Mem_flags::PRODUCER);
                 trade_mem_prod = mem_map<common::memory_struct<common::Trade>>("/dev/shm/hft_send_trade", Mem_flags::PRODUCER);
                 candle_mem_prod = mem_map<common::memory_struct<common::Candle>>("/dev/shm/hft_send_candle", Mem_flags::PRODUCER);
+                portfolio_mem_prod = mem_map<common::memory_struct<common::Portfolio_state>>("/dev/shm/hft_send_portfolio", Mem_flags::PRODUCER);
             }
 
             template <typename T, typename Y>
@@ -99,7 +103,7 @@ namespace memory
                 uint64_t local_write_idx = mem_lay_prod->write_idx;
                 uint64_t cached_read_idx = mem_lay_prod->read_idx;
 
-                if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY) return; // Drop if consumer is too slow
+                if (local_write_idx - cached_read_idx >= global::BUFFER_CAPACITY) return; 
 
                 mem_lay_prod->buffer[local_write_idx % global::BUFFER_CAPACITY] = mem;
                 std::atomic_thread_fence(std::memory_order_release);
@@ -127,7 +131,6 @@ namespace memory
                 }
             }
 
-            // Specialized poller for Orders to derive Trades
             void poll_order_spsc()
             {
                 if (!order_mem) return;
@@ -140,12 +143,12 @@ namespace memory
                     int slot = local_read_idx % global::BUFFER_CAPACITY;
                     const common::Order& raw = order_mem->buffer[slot];
 
-                    if (raw.status == 1) // 1 == FILLED
+                    if (raw.status == 1) 
                     {
                         common::Trade tr = {cstime::get_timestamp(), raw.size, raw.price, 
                             (raw.side == common::Order_side::BUY) ? common::Order_type::buy : common::Order_type::sell}; 
                         
-                        write_spsc(trade_mem_prod, tr); // Write to the actual producer queue!
+                        write_spsc(trade_mem_prod, tr); 
                     }
                     else 
                     {
@@ -164,9 +167,10 @@ namespace memory
                 {
                     poll_spsc<common::memory_struct<common::Candle>, common::Candle>(candle_mem, candle_mem_prod);
                     poll_spsc<common::memory_struct<common::Report>, common::Report>(report_mem, report_mem_prod);
-                    poll_order_spsc(); // Handles orders and generates trades
+                    poll_spsc<common::memory_struct<common::Portfolio_state>, common::Portfolio_state>(portfolio_mem, portfolio_mem_prod);
+                    poll_order_spsc(); 
                     
-                    _mm_pause(); // Keep CPU happy
+                    _mm_pause(); 
                 }
             }
     };

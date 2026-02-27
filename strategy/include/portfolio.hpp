@@ -5,6 +5,14 @@
 
 namespace strategy 
 {
+    struct Portfolio_state {
+        double cash;
+        double locked_cash;
+        double position;
+        double total_fees;
+        double equity;
+    };
+
     struct Portfolio
     {
         double starting_cash;
@@ -24,6 +32,17 @@ namespace strategy
             , total_fees(0.0)
             , fee_rate(fee)
         {}
+
+        Portfolio_state get_state(double current_price) const
+        {
+            return {
+                cash,
+                locked_cash,
+                position,
+                total_fees,
+                get_equity(current_price),
+            };
+        }
 
         double get_equity(double current_price) const 
         {

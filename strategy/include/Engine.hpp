@@ -103,6 +103,8 @@ namespace strategy
         void connect()
         {
             order_mem  = map_mem<common::memory_struct<common::Order>>("/dev/shm/hft_order", MemoryFlags::PRODUCER);
+            portfolio_mem  = map_mem<common::memory_struct<strategy::Portfolio_state>>("/dev/shm/hft_portfolio", MemoryFlags::PRODUCER);
+
             candle_mem = map_mem<common::memory_struct<common::Candle>>("/dev/shm/hft_candle", MemoryFlags::CONSUMER);
             report_mem = map_mem<common::memory_struct<common::Report>>("/dev/shm/hft_report", MemoryFlags::CONSUMER);
 
@@ -119,46 +121,40 @@ namespace strategy
             while (true)
             {
                 write_order();
-                uint64_t current_write_idx        = candle_mem->write_idx;
-                uint64_t current_report_write_idx = report_mem->write_idx;
-
+                
+                uint64_t current_write_idx = candle_mem->write_idx;
                 if (local_read_idx < current_write_idx)
                 {
-                    int    slot = local_read_idx % 16384;
-                    common::Candle raw  = candle_mem->buffer[slot];
-
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                    int slot = local_read_idx % 16384;
+                    common::Candle raw = candle_mem->buffer[slot];
+                    
+                    last_price = raw.close; 
                     ring_buffer.add(raw);
                     local_read_idx++;
                     candle_mem->read_idx = local_read_idx;
 
-                    if (warm_count > 0)
-                    {
-                        warm_count--;
-                        continue;
-                    }
-                    double price = ring_buffer.get(0).get_open();
+                    if (last_price > 0) write_portfolio(last_price);
 
-                    if (price < 0.0001)
-                    { 
-                        local_read_idx++;
-                        candle_mem->read_idx = local_read_idx;
-                        continue;
-                    }
+                    if (warm_count > 0) { warm_count--; continue; }
+                    
                     strategy.run(ring_buffer, *this);
                 }
+
+                uint64_t current_report_write_idx = report_mem->write_idx;
                 if (local_report_read_idx < current_report_write_idx)
                 {
-                    int    slot = local_report_read_idx % 16384;
-                    common::Report raw  = report_mem->buffer[slot];
+                    std::atomic_thread_fence(std::memory_order_acquire); 
+                    int slot = local_report_read_idx % 16384;
+                    common::Report raw = report_mem->buffer[slot];
 
                     on_report(raw);
-
+                    write_portfolio(last_price);
                     local_report_read_idx++;
                     report_mem->read_idx = local_report_read_idx;
                 }
-                else
-                {
-                    std::this_thread::yield();
+                else {
+                    std::this_thread::yield(); 
                 }
             }
         }
@@ -276,6 +272,21 @@ namespace strategy
 
     private:
 
+        void write_portfolio(double current_price)  
+        {
+            uint64_t local_write_idx = portfolio_mem->write_idx;
+            uint64_t cached_read_idx = portfolio_mem->read_idx;
+            while (local_write_idx - cached_read_idx >= BUFFER_CAPACITY)
+            {
+                std::atomic_thread_fence(std::memory_order_acquire);
+                cached_read_idx = portfolio_mem->read_idx;
+            }
+            Portfolio_state port = portfolio.get_state(current_price);
+            portfolio_mem->buffer[local_write_idx % BUFFER_CAPACITY] = port;
+            std::atomic_thread_fence(std::memory_order_release);
+            portfolio_mem->write_idx = local_write_idx + 1;
+        }
+
         void write_order()  
         {
             if (delayed_orders.empty())
@@ -302,6 +313,8 @@ namespace strategy
         common::memory_struct<common::Candle>* candle_mem;
         common::memory_struct<common::Order>*  order_mem;
         common::memory_struct<common::Report>* report_mem;
+        common::memory_struct<strategy::Portfolio_state>* portfolio_mem;
+
         Ring_buffer            ring_buffer;
         size_t                 warm_count = 0;
         uint64_t               order_id   = 0;
@@ -314,6 +327,8 @@ namespace strategy
 
         std::deque<common::Delayed_order> delayed_orders;
         uint64_t delay;
+
+        double last_price = 0;
 
     };
 }; // namespace strategy
