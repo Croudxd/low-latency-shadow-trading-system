@@ -4,17 +4,27 @@ KDB_BIN = ./build/kdb/kdb
 STRATEGY_BIN = ./build/strategy/strategy
 FEEDER_PATH = ./bitfinex-feeder
 
+#TESTs
+ENGINE_TEST_PATH = ./build/order-book/engine-test
+ORDER_TEST_PATH = ./build/order-book/order-test
+STRATEGY_TEST_PATH = ./build/order-book/engine-test
+
 # PYTHON
 STREAMLIT_APP = viewer/main.py
 
 #Q
 SCHEMA_PTH = kdb/q/schema.q
 
-.PHONY: all run stop clean
+.PHONY: all test run stop clean
 
 all:
 	mkdir -p build
 	cd build && cmake .. && make -j
+
+test:
+	$(ENGINE_TEST_PATH)
+	$(ORDER_TEST_PATH)
+	$(STRATEGY_TEST_PATH)
 
 run: all
 	q $(SCHEMA_PTH) -p 5001 & echo $$! > .q_db.pid
