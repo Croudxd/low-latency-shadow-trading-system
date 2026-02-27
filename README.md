@@ -1,7 +1,14 @@
-# HFT Core: Ultra-Low Latency C++ Trading Engine
-
-A modular, high-frequency trading (HFT) infrastructure built in C++. It utilizes **Shared Memory (IPC)** and **Lock-Free Ring Buffers** to achieve nanosecond-level latency and throughput exceeding 100 million orders per second.
+# HFT Core: Ultra-Low Latency C++ shadow trading system
+A modular, high-frequency trading (HFT) infrastructure built in C++. It utilizes **Shared Memory (IPC)** and **Lock-Free Ring Buffers** to achieve nanosecond-level latency.
 - - -
+### Specs
+```
+C++20 (cmake/make)
+q / kdb+
+python / uv (pandas, streamlit, plotly)
+```
+- - -
+
 ## System Architecture
 
 The project is decoupled into independent processes that communicate via **Memory Mapped Files (`/dev/shm`)**. This allows the Strategy and Engine to run on separate CPU cores without context-switching overhead.
